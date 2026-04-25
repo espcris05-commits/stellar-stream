@@ -1,4 +1,4 @@
-
+import React, { useState, useMemo, useRef } from "react"; // Added missing imports
 import { Stream } from "../types/stream";
 import { getExportCsvUrl, ListStreamsFilters } from "../services/api";
 import { CopyableAddress } from "./CopyableAddress";
@@ -31,6 +31,15 @@ function formatTimestamp(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleString();
 }
 
+// ── Fixed Component Declaration ───────────────────────────────────────────
+export function StreamsTable({ streams, filters, onFiltersChange, onCancel, onEditStartTime }: StreamsTableProps) {
+  const [expandedStreamId, setExpandedStreamId] = useState<string | null>(null);
+
+  const exportUrl = useMemo(() => getExportCsvUrl(filters), [filters]);
+
+  const toggleTimeline = (id: string) => {
+    setExpandedStreamId(prev => (prev === id ? null : id));
+  };
 
   return (
     <div className="card">
@@ -93,7 +102,6 @@ function formatTimestamp(unixSeconds: number): string {
     </div>
   );
 }
-
 
 // ── StreamRow ─────────────────────────────────────────────────────────────
 // Extracted so each row can hold its own triggerRef without polluting the
@@ -229,4 +237,3 @@ function StreamRow({
     </>
   );
 }
-

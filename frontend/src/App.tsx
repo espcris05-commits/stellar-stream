@@ -42,6 +42,23 @@ function describeGlobalError(raw: string): string {
 
 function App() {
   const wallet = useFreighter();
+
+  // ── ISSUE #159: Dark Mode Logic (LocalStorage + System Preference) ─────────────────
+  // This logic initializes the theme from localStorage or system settings
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved) return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  // ───────────────────────────────────────────────────────────────────────────────────
+
   const {
     view: viewMode,
     filters,
@@ -61,8 +78,6 @@ function App() {
   } | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
-
-
 
   const metrics = useMemo(() => {
     const activeCount = streams.filter(
@@ -123,8 +138,6 @@ function App() {
     }
   }
 
-
-
   return (
     <div className="app-shell">
       <header className="hero">
@@ -133,6 +146,19 @@ function App() {
             <p className="eyebrow">Soroban-native MVP</p>
             <h1>StellarStream</h1>
           </div>
+          
+          {/* ── ISSUE #159: Theme Toggle Button ── */}
+          <button 
+            type="button" 
+            className="btn-ghost" 
+            onClick={toggleTheme}
+            style={{ marginRight: '0.5rem', fontSize: '1.2rem', minHeight: '36px', display: 'flex', alignItems: 'center' }}
+            aria-label="Toggle Dark Mode"
+          >
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
+          {/* ───────────────────────────────────── */}
+
           <WalletButton wallet={wallet} />
         </div>
         <p className="hero-copy">
