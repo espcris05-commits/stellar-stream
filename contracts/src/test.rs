@@ -817,6 +817,40 @@ fn test_cancel_midstream_no_prior_claims_splits_correctly() {
 }
 
 #[test]
+fn test_cancel_then_claim_flow() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, StellarStreamContract);
+    let client = StellarStreamContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let sender = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let token = create_token(&env, &admin);
+    let token_admin = token::StellarAssetClient::new(&env, &token);
+    token_admin.mint(&sender, &1000);
+
+    // 1. Create stream, advance ledger to 50% vested
+    let stream_id = client.create_stream(&sender, &recipient, &token, &1000, &0, &1000, &None);
+    env.ledger().with_mut(|l| l.timestamp = 500);
+
+    // 2. Cancel stream from sender
+    client.cancel(&stream_id, &sender);
+
+    // 5. Sender refund equals unvested portion
+    let token_client = token::Client::new(&env, &token);
+    assert_eq!(token_client.balance(&sender), 500); // 50% unvested (500 tokens) refunded
+
+    // 3. Recipient claims — should succeed with ~50% amount
+    let claimed = client.claim(&stream_id, &recipient, &500);
+    assert_eq!(claimed, 500);
+    assert_eq!(token_client.balance(&recipient), 500);
+
+    // 4. Second claim attempt returns 0 claimable
+    assert_eq!(client.claimable(&stream_id, &1000), 0);
+}
+
+#[test]
 fn test_cancel_midstream_non_round_amounts() {
     let env = Env::default();
     env.mock_all_auths();
