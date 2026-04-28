@@ -309,8 +309,34 @@ describe("archiveOldStreams", () => {
   });
 
   function createArchiveDbMock() {
-    const streams: any[] = [];
-    const archivedStreams: any[] = [];
+    const streams: Array<{
+      id: string;
+      sender: string;
+      recipient: string;
+      asset_code: string;
+      total_amount: number;
+      duration_seconds: number;
+      start_at: number;
+      created_at: number;
+      completed_at?: number;
+      canceled_at?: number | null;
+      archived_at?: number | null;
+    }> = [];
+
+    const archivedStreams: Array<{
+      id: string;
+      sender: string;
+      recipient: string;
+      asset_code: string;
+      total_amount: number;
+      duration_seconds: number;
+      start_at: number;
+      created_at: number;
+      completed_at?: number | null;
+      canceled_at?: number | null;
+      refunded_amount?: number | null;
+      archived_at: number;
+    }> = [];
 
     return {
       prepare(sql: string) {
@@ -319,8 +345,8 @@ describe("archiveOldStreams", () => {
             sql.includes("AND completed_at < ?") && 
             sql.includes("AND archived_at IS NULL")) {
           return {
-            all: (params: any) => {
-              const threshold = params; // params is the threshold directly, not an array
+            all: (params: number) => {
+              const threshold = params; // params is threshold directly, not an array
               return streams.filter(stream => 
                 stream.completed_at && 
                 stream.completed_at < threshold && 
@@ -332,20 +358,20 @@ describe("archiveOldStreams", () => {
 
         if (sql.includes("INSERT INTO stream_archive")) {
           return {
-            run: (...params: any[]) => {
+            run: (...params: (string | number | null)[]) => {
               archivedStreams.push({
-                id: params[0],
-                sender: params[1],
-                recipient: params[2],
-                asset_code: params[3],
-                total_amount: params[4],
-                duration_seconds: params[5],
-                start_at: params[6],
-                created_at: params[7],
-                canceled_at: params[8],
-                completed_at: params[9],
-                refunded_amount: params[10],
-                archived_at: params[11],
+                id: params[0] as string,
+                sender: params[1] as string,
+                recipient: params[2] as string,
+                asset_code: params[3] as string,
+                total_amount: params[4] as number,
+                duration_seconds: params[5] as number,
+                start_at: params[6] as number,
+                created_at: params[7] as number,
+                canceled_at: params[8] as number | null,
+                completed_at: params[9] as number | null,
+                refunded_amount: params[10] as number | null,
+                archived_at: params[11] as number,
               });
               return { changes: 1 };
             },
@@ -354,9 +380,9 @@ describe("archiveOldStreams", () => {
 
         if (sql.includes("UPDATE streams SET archived_at")) {
           return {
-            run: (...params: any[]) => {
-              const archivedAt = params[0];
-              const streamId = params[1];
+            run: (...params: (number | string)[]) => {
+              const archivedAt = params[0] as number;
+              const streamId = params[1] as string;
               const stream = streams.find(s => s.id === streamId);
               if (stream) {
                 stream.archived_at = archivedAt;
