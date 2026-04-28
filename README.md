@@ -73,6 +73,12 @@ Purpose:
 Response:
 - `service`, `status`, `timestamp`
 
+**Docker Compose Health Check Configuration:**
+- **Interval:** 30s
+- **Timeout:** 10s
+- **Retries:** 3
+- **Start Period:** 10s
+
 ### `GET /api/streams`
 Purpose:
 - List streams sorted by newest first, with optional filtering and pagination
