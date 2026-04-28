@@ -27,6 +27,18 @@ cargo insta review
 ```
 This will allow you to interactively review and accept changes to the snapshots.
 
+## Changelog and Commits
+
+We follow the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification for commit messages. Please use a conventional commit style for your changes so the changelog can be generated consistently.
+
+Before submitting a Pull Request, run:
+
+```bash
+npm run changelog:update
+```
+
+This updates `CHANGELOG.md` with your recent commits without removing the historical entries already in the file.
+
 ## Pull Request Process
 
 1. Create a feature branch from `main`.

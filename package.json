@@ -9,7 +9,11 @@
     "install:all": "cd backend && npm install && cd ../frontend && npm install",
     "build": "cd backend && npm run build && cd ../frontend && npm run build",
     "deploy:contract": "./scripts/deploy.sh",
-    "gen:bindings": "./scripts/generate-contract-bindings.sh"
+    "gen:bindings": "./scripts/generate-contract-bindings.sh",
+    "changelog:update": "conventional-changelog -p angular -i CHANGELOG.md -s"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "conventional-changelog-cli": "^5.0.0"
+  }
 }
