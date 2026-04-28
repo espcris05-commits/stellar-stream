@@ -73,23 +73,30 @@ export function recordEventWithDb(
   });
 }
 
-export function getStreamHistory(streamId: string): StreamEvent[] {
+export function getStreamHistory(streamId: string, limit = 50, offset = 0): StreamEvent[] {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT * FROM stream_events WHERE stream_id = ? ORDER BY timestamp ASC, id ASC`,
+      `SELECT * FROM stream_events WHERE stream_id = ? ORDER BY timestamp ASC, id ASC LIMIT ? OFFSET ?`,
     )
-    .all(streamId) as EventRow[];
+    .all(streamId, limit, offset) as EventRow[];
   return rows.map(rowToEvent);
 }
 
-export function getAllEvents(limit = 100, offset = 0): StreamEvent[] {
+export function getAllEvents(limit = 100, offset = 0, cursor?: number): StreamEvent[] {
   const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT * FROM stream_events ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?`,
-    )
-    .all(limit, offset) as EventRow[];
+  let query = `SELECT * FROM stream_events`;
+  const params: any[] = [];
+  
+  if (cursor !== undefined) {
+    query += ` WHERE id < ?`;
+    params.push(cursor);
+  }
+  
+  query += ` ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?`;
+  params.push(limit, offset);
+  
+  const rows = db.prepare(query).all(...params) as EventRow[];
   return rows.map(rowToEvent);
 }
 
@@ -97,17 +104,25 @@ export function getGlobalEvents(
   limit: number,
   offset: number,
   eventType?: StreamEventType,
+  cursor?: number,
 ): StreamEvent[] {
   const db = getDb();
   if (eventType) {
-    const rows = db
-      .prepare(
-        `SELECT * FROM stream_events WHERE event_type = ? ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?`,
-      )
-      .all(eventType, limit, offset) as EventRow[];
+    let query = `SELECT * FROM stream_events WHERE event_type = ?`;
+    const params: any[] = [eventType];
+    
+    if (cursor !== undefined) {
+      query += ` AND id < ?`;
+      params.push(cursor);
+    }
+    
+    query += ` ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
+    
+    const rows = db.prepare(query).all(...params) as EventRow[];
     return rows.map(rowToEvent);
   }
-  return getAllEvents(limit, offset);
+  return getAllEvents(limit, offset, cursor);
 }
 
 export function countAllEvents(eventType?: StreamEventType): number {
@@ -121,6 +136,14 @@ export function countAllEvents(eventType?: StreamEventType): number {
   const row = db
     .prepare(`SELECT COUNT(*) as count FROM stream_events`)
     .get() as { count: number };
+  return row.count;
+}
+
+export function countStreamEvents(streamId: string): number {
+  const db = getDb();
+  const row = db
+    .prepare(`SELECT COUNT(*) as count FROM stream_events WHERE stream_id = ?`)
+    .get(streamId) as { count: number };
   return row.count;
 }
 

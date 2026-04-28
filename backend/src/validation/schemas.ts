@@ -127,6 +127,10 @@ export const listEventsQuerySchema = z.object({
     .min(1, "limit must be greater than or equal to 1")
     .max(100, "limit must be less than or equal to 100")
     .optional(),
+  cursor: z
+    .coerce.number()
+    .int("cursor must be an integer")
+    .optional(),
 });
 
 export const recipientAccountIdSchema = z.object({

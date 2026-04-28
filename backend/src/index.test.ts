@@ -17,6 +17,7 @@ const eventHistoryMocks = vi.hoisted(() => ({
   getGlobalEvents: vi.fn(),
   countAllEvents: vi.fn(),
   recordEvent: vi.fn(),
+  getStreamEventSummary: vi.fn(),
 }));
 
 vi.mock("./services/streamStore", () => streamStoreMocks);
@@ -214,6 +215,7 @@ beforeEach(() => {
   eventHistoryMocks.getGlobalEvents.mockReset();
   eventHistoryMocks.countAllEvents.mockReset();
   eventHistoryMocks.getStreamHistory.mockReset();
+  eventHistoryMocks.getStreamEventSummary.mockReset();
 });
 
 describe("GET /api/streams", () => {
@@ -568,6 +570,3 @@ describe("GET /api/events", () => {
   });
 });
 
-
-  });
-});

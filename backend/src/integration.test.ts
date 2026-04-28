@@ -2,8 +2,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import { app } from "./index";
 import { initDb, getDb } from "./services/db";
+import { Keypair } from "@stellar/stellar-sdk";
 import path from "path";
 import fs from "fs";
+
 
 // Use a separate test database
 const TEST_DB_PATH = path.join(__dirname, "..", "data", "test-streams.db");
@@ -49,10 +51,13 @@ describe("Backend Integration Tests", () => {
   });
 
   describe("Stream Lifecycle", () => {
+    const validSender = Keypair.random().publicKey();
+    const validRecipient = Keypair.random().publicKey();
+
     const mockStream = {
       id: "1",
-      sender: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
-      recipient: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      sender: validSender,
+      recipient: validRecipient,
       assetCode: "USDC",
       totalAmount: 1000,
       durationSeconds: 3600,
@@ -223,22 +228,42 @@ describe("Backend Integration Tests", () => {
         expect(response.status).toBe(200);
         expect(response.body.data).toHaveLength(1);
         expect(response.body.data[0].recipient).toBe(mockStream.recipient);
+        expect(response.body.data[0].progress).toBeDefined(); // Verify progress is computed
       });
 
       it("should return empty array for recipient with no streams", async () => {
+        const emptyRecipient = Keypair.random().publicKey();
         const response = await request(app)
-          .get("/api/recipients/GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/streams");
+          .get(`/api/recipients/${emptyRecipient}/streams`);
         
         expect(response.status).toBe(200);
-        expect(response.body.data).toHaveLength(0);
+        expect(response.body.data).toEqual([]); // Assert empty data array
+        expect(response.body.total).toBe(0);
       });
 
-      it("should return 400 for invalid account ID", async () => {
+
+      it("should return 400 for account ID that does not start with G", async () => {
+        const response = await request(app)
+          .get("/api/recipients/ABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/streams");
+        
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain("must be a valid Stellar account ID");
+      });
+
+      it("should return 400 for account ID that is 55 chars", async () => {
+        const response = await request(app)
+          .get("/api/recipients/GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/streams");
+        
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain("must be a valid Stellar account ID");
+      });
+
+      it("should return 400 for invalid account ID format", async () => {
         const response = await request(app)
           .get("/api/recipients/invalid/streams");
         
         expect(response.status).toBe(400);
-        expect(response.body.error).toContain("Must be a valid Stellar account ID");
+        expect(response.body.error).toContain("must be a valid Stellar account ID");
       });
     });
 
@@ -294,7 +319,17 @@ describe("Backend Integration Tests", () => {
           .get("/api/senders/invalid/streams");
         
         expect(response.status).toBe(400);
-        expect(response.body.error).toContain("Must be a valid Stellar account ID");
+        expect(response.body.error).toContain("must be a valid Stellar account ID");
+      });
+
+      it("should return empty array for sender with no streams", async () => {
+        const emptySender = Keypair.random().publicKey();
+        const response = await request(app)
+          .get(`/api/senders/${emptySender}/streams`);
+        
+        expect(response.status).toBe(200);
+        expect(response.body.data).toEqual([]);
+        expect(response.body.total).toBe(0);
       });
     });
   });
@@ -446,6 +481,39 @@ describe("Backend Integration Tests", () => {
         expect(response.status).toBe(400);
         expect(response.body.error).toContain("eventType must be one of");
       });
+
+      it("should support cursor-based pagination", async () => {
+        // We have 4 events in total from beforeEach
+        const firstPage = await request(app)
+          .get("/api/events")
+          .query({ limit: 2 });
+        
+        expect(firstPage.status).toBe(200);
+        expect(firstPage.body.data).toHaveLength(2);
+        
+        const cursor = firstPage.body.data[1].id;
+        
+        const secondPage = await request(app)
+          .get("/api/events")
+          .query({ limit: 2, cursor });
+        
+        expect(secondPage.status).toBe(200);
+        expect(secondPage.body.data).toHaveLength(2);
+        // All IDs in second page should be less than the cursor
+        secondPage.body.data.forEach((e: any) => {
+          expect(e.id).toBeLessThan(cursor);
+        });
+      });
+
+      it("should include events across multiple streams", async () => {
+        const response = await request(app).get("/api/events");
+        const streamIds = new Set(response.body.data.map((e: any) => e.streamId));
+        
+        expect(streamIds.size).toBeGreaterThan(1);
+        expect(streamIds.has("1")).toBe(true);
+        expect(streamIds.has("2")).toBe(true);
+        expect(streamIds.has("3")).toBe(true);
+      });
     });
   });
 
@@ -539,6 +607,27 @@ describe("Backend Integration Tests", () => {
       const response = await request(app).get("/api/streams");
       
       expect(response.status).toBe(500);
+
+      // Re-initialize for subsequent tests
+      initDb();
+    });
+  });
+
+  describe("Assets API", () => {
+    it("should return the list of allowed assets", async () => {
+      const response = await request(app).get("/api/assets");
+      
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(expect.arrayContaining(["USDC", "XLM"]));
+    });
+
+    it("should return normalized assets (uppercase)", async () => {
+      // The app.ts or index.ts already normalizes it during startup or at each request?
+      // Actually index.ts line 78-80 normalizes it.
+      const response = await request(app).get("/api/assets");
+      response.body.data.forEach((asset: string) => {
+        expect(asset).toBe(asset.toUpperCase());
+      });
     });
   });
 });

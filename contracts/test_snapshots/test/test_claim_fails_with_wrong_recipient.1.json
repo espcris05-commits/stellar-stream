@@ -77,7 +77,8 @@
                 },
                 {
                   "u64": 1000
-                }
+                },
+                "void"
               ]
             }
           },
@@ -283,6 +284,26 @@
                       },
                       "val": {
                         "u64": 1000
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "metadata"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
+                        "symbol": "pause_started_at"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
+                        "symbol": "paused"
+                      },
+                      "val": {
+                        "bool": false
                       }
                     },
                     {
@@ -966,7 +987,8 @@
                 },
                 {
                   "u64": 1000
-                }
+                },
+                "void"
               ]
             }
           }
@@ -1122,6 +1144,53 @@
       "event": {
         "ext": "v0",
         "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "04cadb4a570fd2e4652e814101509912cce6c9a2325d6eec8d7100caf859f3e0"
+              },
+              {
+                "symbol": "symbol"
+              }
+            ],
+            "data": "void"
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "04cadb4a570fd2e4652e814101509912cce6c9a2325d6eec8d7100caf859f3e0",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_return"
+              },
+              {
+                "symbol": "symbol"
+              }
+            ],
+            "data": {
+              "string": "aaa"
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
         "type_": "contract",
         "body": {
           "v0": {
@@ -1142,6 +1211,12 @@
                   "val": {
                     "u64": 1000
                   }
+                },
+                {
+                  "key": {
+                    "symbol": "metadata"
+                  },
+                  "val": "void"
                 },
                 {
                   "key": {
@@ -1181,6 +1256,14 @@
                   },
                   "val": {
                     "address": "CACMVW2KK4H5FZDFF2AUCAKQTEJMZZWJUIZF23XMRVYQBSXYLHZ6BKWN"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "token_symbol"
+                  },
+                  "val": {
+                    "string": "aaa"
                   }
                 },
                 {

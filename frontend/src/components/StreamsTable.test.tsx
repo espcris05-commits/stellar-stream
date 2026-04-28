@@ -1,8 +1,8 @@
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { StreamsTable } from '../components/StreamsTable'; 
+import { StreamsTable } from './StreamsTable'; 
 import { Stream } from '../types/stream'; 
 
 const mockStreams: Stream[] = [
@@ -24,14 +24,68 @@ const mockStreams: Stream[] = [
       percentComplete: 20,
     },
   },
+  {
+    id: '2',
+    sender: 'G_SENDER',
+    recipient: 'G_RECIPIENT123',
+    assetCode: 'USDC',
+    totalAmount: 100,
+    durationSeconds: 3600,
+    startAt: 1770000000,
+    createdAt: 1670000000,
+    progress: {
+      status: 'scheduled',
+      ratePerSecond: 0.01,
+      elapsedSeconds: 0,
+      vestedAmount: 0,
+      remainingAmount: 100,
+      percentComplete: 0,
+    },
+  },
+  {
+    id: '3',
+    sender: 'G_SENDER',
+    recipient: 'G_RECIPIENT123',
+    assetCode: 'USDC',
+    totalAmount: 100,
+    durationSeconds: 3600,
+    startAt: 1670000000,
+    createdAt: 1670000000,
+    progress: {
+      status: 'completed',
+      ratePerSecond: 0.01,
+      elapsedSeconds: 3600,
+      vestedAmount: 100,
+      remainingAmount: 0,
+      percentComplete: 100,
+    },
+  },
+  {
+    id: '4',
+    sender: 'G_SENDER',
+    recipient: 'G_RECIPIENT123',
+    assetCode: 'USDC',
+    totalAmount: 100,
+    durationSeconds: 3600,
+    startAt: 1670000000,
+    createdAt: 1670000000,
+    progress: {
+      status: 'canceled',
+      ratePerSecond: 0.01,
+      elapsedSeconds: 500,
+      vestedAmount: 10,
+      remainingAmount: 90,
+      percentComplete: 10,
+    },
+  },
 ];
 
 const defaultProps = {
   streams: mockStreams,
   filters: {},
-  onFiltersChange: noop,
+  onFiltersChange: vi.fn(),
   onCancel: vi.fn().mockResolvedValue(undefined),
-  onEditStartTime: noop,
+  onEditStartTime: vi.fn(),
 };
 
 describe('StreamsTable Component', () => {
@@ -41,30 +95,47 @@ describe('StreamsTable Component', () => {
   it('renders table data when streams are passed', () => {
     render(
       <StreamsTable 
-        streams={mockStreams} 
-        filters={{ status: 'active', sender: '', recipient: '' }}
-        onFiltersChange={vi.fn()}
-        onCancel={vi.fn()}
-        onEditStartTime={vi.fn()}
+        {...defaultProps}
       />
     );
     
     // Checking for text elements populated by the array map
-    expect(screen.getByTitle('G_RECIPIENT123')).toBeInTheDocument();
-    expect(screen.getByText(/active/i)).toBeInTheDocument();
+    expect(screen.getAllByTitle('G_RECIPIENT123').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/active/i).length).toBeGreaterThan(0);
   });
 
-  it('renders an empty state nicely', () => {
-    render(
-      <StreamsTable 
-        streams={[]} 
-        filters={{ status: 'active', sender: '', recipient: '' }}
-        onFiltersChange={vi.fn()}
-        onCancel={vi.fn()}
-        onEditStartTime={vi.fn()}
-      />
-    );
-    // You can modify this string query based on what you actually render for 0 items
-    expect(screen.queryByTitle('G_RECIPIENT123')).not.toBeInTheDocument();
+  it('renders correct status badges for all statuses', () => {
+    render(<StreamsTable {...defaultProps} />);
+    
+    expect(screen.getByText('active')).toHaveClass('badge-active');
+    expect(screen.getByText('scheduled')).toHaveClass('badge-scheduled');
+    expect(screen.getByText('completed')).toHaveClass('badge-completed');
+    expect(screen.getByText('canceled')).toHaveClass('badge-canceled');
+  });
+
+  it('calls onCancel when cancel button is clicked on an active stream', () => {
+    const onCancel = vi.fn().mockResolvedValue(undefined);
+    render(<StreamsTable {...defaultProps} onCancel={onCancel} />);
+    
+    const cancelButtons = screen.getAllByLabelText(/cancel stream/i);
+    // Stream 1 is active, cancel should be enabled
+    fireEvent.click(cancelButtons[0]);
+    expect(onCancel).toHaveBeenCalledWith('1');
+  });
+
+  it('disables cancel button for completed or canceled streams', () => {
+    render(<StreamsTable {...defaultProps} />);
+    
+    const cancelButtons = screen.getAllByLabelText(/cancel stream/i);
+    // Stream 3 is completed (index 2), Stream 4 is canceled (index 3)
+    expect(cancelButtons[2]).toBeDisabled();
+    expect(cancelButtons[3]).toBeDisabled();
+  });
+
+  it('renders a helpful message for empty streams array', () => {
+    render(<StreamsTable {...defaultProps} streams={[]} />);
+    
+    expect(screen.getByText(/no streams match your filters/i)).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 });

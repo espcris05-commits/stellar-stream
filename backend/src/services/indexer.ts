@@ -13,6 +13,70 @@ let contractId: string | null = null;
 let networkPassphrase: string = Networks.TESTNET;
 let lastProcessedLedger = 0;
 let indexerInterval: NodeJS.Timeout | null = null;
+let indexerStartLedger: number | null = null;
+
+export enum CircuitState {
+  CLOSED = "CLOSED",
+  OPEN = "OPEN",
+  HALF_OPEN = "HALF_OPEN",
+}
+
+class CircuitBreaker {
+  private state: CircuitState = CircuitState.CLOSED;
+  private failureCount: number = 0;
+  private lastFailureTime: number = 0;
+  private readonly failureThreshold: number = 5;
+  private readonly timeoutMs: number;
+
+  constructor(timeoutMs: number = 60000) {
+    this.timeoutMs = timeoutMs;
+  }
+
+  public getState(): CircuitState {
+    if (this.state === CircuitState.OPEN) {
+      const now = Date.now();
+      if (now - this.lastFailureTime >= this.timeoutMs) {
+        this.setState(CircuitState.HALF_OPEN);
+      }
+    }
+    return this.state;
+  }
+
+  public onSuccess(): void {
+    if (this.state !== CircuitState.CLOSED) {
+      console.log(`[Circuit Breaker] Probe successful. Resetting to CLOSED state.`);
+      this.setState(CircuitState.CLOSED);
+    }
+    this.failureCount = 0;
+  }
+
+  public onFailure(): void {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+    
+    if (this.state === CircuitState.CLOSED && this.failureCount >= this.failureThreshold) {
+      console.log(`[Circuit Breaker] ${this.failureThreshold} consecutive failures reached. Opening circuit.`);
+      this.setState(CircuitState.OPEN);
+    } else if (this.state === CircuitState.HALF_OPEN) {
+      console.log(`[Circuit Breaker] Probe failed in HALF_OPEN state. Re-opening circuit.`);
+      this.setState(CircuitState.OPEN);
+    }
+  }
+
+  private setState(newState: CircuitState): void {
+    if (this.state !== newState) {
+      console.log(`[Circuit Breaker] State Transition: ${this.state} -> ${newState}`);
+      this.state = newState;
+    }
+  }
+}
+
+const CIRCUIT_BREAKER_TIMEOUT_MS = Number(process.env.CIRCUIT_BREAKER_TIMEOUT_MS ?? 60000);
+const circuitBreaker = new CircuitBreaker(CIRCUIT_BREAKER_TIMEOUT_MS);
+
+export function getCircuitBreakerStatus(): CircuitState {
+  return circuitBreaker.getState();
+}
 
 export function initIndexer(
   rpcUrl: string,
@@ -23,6 +87,20 @@ export function initIndexer(
   contractId = contractIdParam;
   if (networkPass) {
     networkPassphrase = networkPass;
+  }
+
+  // Read INDEXER_START_LEDGER environment variable
+  const startLedgerEnv = process.env.INDEXER_START_LEDGER;
+  if (startLedgerEnv !== undefined) {
+    const startLedger = parseInt(startLedgerEnv, 10);
+    if (!isNaN(startLedger)) {
+      indexerStartLedger = startLedger;
+      if (startLedger !== 0) {
+        console.warn(`INDEXER_START_LEDGER override active: starting from ledger ${startLedger}`);
+      }
+    } else {
+      console.error('Invalid INDEXER_START_LEDGER value, must be a number');
+    }
   }
 }
 
@@ -57,26 +135,37 @@ async function indexEvents(): Promise<void> {
     return;
   }
 
+  const state = circuitBreaker.getState();
+  if (state === CircuitState.OPEN) {
+    return;
+  }
+
   try {
     const db = getDb();
     const latestLedger = await rpcServer.getLatestLedger();
     const currentLedger = latestLedger.sequence;
 
     if (lastProcessedLedger === 0) {
-      // First run - attempt to load last processed ledger from database
-      const row = db
-        .prepare("SELECT last_ledger FROM indexer_cursor WHERE id = ?")
-        .get(contractId) as { last_ledger: number } | undefined;
-
-      if (row) {
-        lastProcessedLedger = row.last_ledger;
+      // Check for INDEXER_START_LEDGER override
+      if (indexerStartLedger !== null && indexerStartLedger !== 0) {
+        lastProcessedLedger = indexerStartLedger - 1; // Start from the ledger before the specified one
       } else {
-        // Fallback: start from recent history (last 100 ledgers)
-        lastProcessedLedger = Math.max(1, currentLedger - 100);
+        // First run - attempt to load last processed ledger from database
+        const row = db
+          .prepare("SELECT last_ledger FROM indexer_cursor WHERE id = ?")
+          .get(contractId) as { last_ledger: number } | undefined;
+
+        if (row) {
+          lastProcessedLedger = row.last_ledger;
+        } else {
+          // Fallback: start from recent history (last 100 ledgers)
+          lastProcessedLedger = Math.max(1, currentLedger - 100);
+        }
       }
     }
 
     if (currentLedger <= lastProcessedLedger) {
+      circuitBreaker.onSuccess();
       return;
     }
 
@@ -103,7 +192,10 @@ async function indexEvents(): Promise<void> {
         "INSERT INTO indexer_cursor (id, last_ledger) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET last_ledger = excluded.last_ledger",
       ).run(contractId, lastProcessedLedger);
     })();
+
+    circuitBreaker.onSuccess();
   } catch (err) {
+    circuitBreaker.onFailure();
     console.error("Failed to index events:", err);
   }
 }

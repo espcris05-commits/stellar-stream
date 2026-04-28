@@ -322,6 +322,48 @@ export const swaggerDocument = {
         },
       },
     },
+    "/api/auth/refresh": {
+      post: {
+        summary: "Refresh JWT",
+        description:
+          "Accepts a still-valid Bearer JWT and returns a new token with a fresh 24h expiry. " +
+          "Use this to avoid forcing users to re-sign a Stellar challenge transaction every day.",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "New JWT issued",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    token: {
+                      type: "string",
+                      description: "New JWT valid for 24 hours.",
+                      example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Missing, invalid, or expired token",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    error: { type: "string", example: "Invalid or expired authorization token." },
+                    code: { type: "string", example: "UNAUTHORIZED" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/assets": {
       get: {
         summary: "List allowed assets",
@@ -673,7 +715,8 @@ export const swaggerDocument = {
               },
             },
           },
-
+          "400": {
+            description: "Invalid request.",
             content: {
               "application/json": {
                 schema: {
@@ -869,6 +912,53 @@ export const swaggerDocument = {
                 schema: {
                   $ref: "#/components/schemas/Error",
                 },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/streams/{id}/history/summary": {
+      get: {
+        summary: "Get stream event count summary",
+        description: "Returns aggregated event counts per type for a stream. Useful for dashboard badges. Uses a single GROUP BY query; missing event types return 0.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "The unique ID of the stream.",
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Event count summary.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: {
+                      type: "object",
+                      required: ["created", "claimed", "canceled", "start_time_updated"],
+                      properties: {
+                        created: { type: "integer", example: 1 },
+                        claimed: { type: "integer", example: 3 },
+                        canceled: { type: "integer", example: 0 },
+                        start_time_updated: { type: "integer", example: 1 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "404": {
+            description: "Stream not found.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Error" },
               },
             },
           },
