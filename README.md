@@ -40,6 +40,77 @@ Contract (`contracts`)
 - Supports `create_stream`, `claimable`, `claim`, and `cancel`
 - Not yet integrated with backend runtime in this MVP
 
+See also: [Event Flow](#event-flow) for detailed sequence diagrams of the contract-to-frontend pipeline and webhook delivery system.
+
+## Event Flow
+
+### On-Chain Event Pipeline
+
+The following sequence diagram shows how events flow from the Soroban contract through the indexing pipeline to the frontend:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Contract as Soroban Contract
+    participant Indexer as Indexer Worker
+    participant SQLite as SQLite Database
+    participant API as Backend API
+    participant Frontend as React Frontend
+
+    User->>Contract: create_stream()
+    Contract->>Contract: Transfer tokens (escrow)
+    Contract->>Contract: Store stream state
+    Contract-->>Stellar: Publish StreamCreated event
+    loop Poll every 10s
+        Indexer->>Stellar RPC: Fetch new events
+        Stellar RPC-->>Indexer: StreamCreated event
+        Indexer->>SQLite: Write stream + event
+    end
+    Frontend->>API: GET /api/streams
+    API->>SQLite: Query streams
+    SQLite-->>API: Return stream data
+    API-->>Frontend: JSON response
+    Frontend->>Frontend: Render timeline
+    Frontend->>API: GET /api/streams/:id/history
+    API->>SQLite: Query stream_events
+    SQLite-->>API: Event history
+    API-->>Frontend: Event timeline JSON
+```
+
+### Webhook Delivery Pipeline
+
+Events from the stream lifecycle are also delivered via HTTP webhooks with retry and dead-letter handling:
+
+```mermaid
+sequenceDiagram
+    participant Stream as Stream Event
+    participant Worker as Webhook Worker
+    participant HTTP as HTTP Delivery
+    participant Target as Webhook Target
+    participant DLQ as Dead Letter Queue
+
+    Stream->>Worker: Event detected (created/claimed/canceled)
+    Worker->>SQLite: Queue webhook delivery (pending)
+    loop Retry every attempt
+        Worker->>HTTP: POST payload
+        HTTP->>Target: Deliver webhook (with HMAC signature)
+        alt Success (2xx)
+            Target-->>HTTP: 200 OK
+            HTTP-->>Worker: Success
+            Worker->>SQLite: Mark delivered
+        else Failure (timeout/5xx)
+            Target-->>HTTP: Error
+            HTTP-->>Worker: Failure
+            Worker->>SQLite: Schedule retry (exponential backoff)
+        end
+        SQLite->>Worker: next_retry_at
+    end
+    alt Max retries exceeded
+        Worker->>DLQ: Move to dead_letters
+        DLQ->>Admin: Alert for manual inspection
+    end
+```
+
 ## 3) Stream Math Model
 
 For each stream:
