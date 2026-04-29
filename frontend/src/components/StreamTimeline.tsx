@@ -13,8 +13,10 @@ export function computeFilteredEvents(
   events: StreamEvent[],
   activeFilters: Set<EventType>,
 ): StreamEvent[] {
-  if (activeFilters.size === 0) return events;
-  return events.filter((e) => activeFilters.has(e.eventType));
+  const filtered = activeFilters.size === 0
+    ? events
+    : events.filter((e) => activeFilters.has(e.eventType));
+  return [...filtered].sort((a, b) => a.timestamp - b.timestamp);
 }
 
 export function toggleFilter(prev: Set<EventType>, type: EventType): Set<EventType> {

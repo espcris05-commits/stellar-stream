@@ -5,15 +5,26 @@
  * Tests the pure functions: computeFilteredEvents, toggleFilter, clearFilters
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import React from "react";
 import * as fc from "fast-check";
 import {
+  StreamTimeline,
   computeFilteredEvents,
   toggleFilter,
   clearFilters,
   EventType,
 } from "./StreamTimeline";
 import type { StreamEvent } from "../services/api";
+
+// Mock the API
+vi.mock("../services/api", () => ({
+  getStreamHistory: vi.fn(),
+  listAllEvents: vi.fn(),
+}));
+
+import { listAllEvents } from "../services/api";
 
 // ---------------------------------------------------------------------------
 // Arbitraries
@@ -169,3 +180,143 @@ describe(
     });
   },
 );
+
+describe("StreamTimeline rendering: events and empty states", () => {
+  it("renders one event of each type with correct icon and label", async () => {
+    const events: StreamEvent[] = [
+      {
+        id: 1,
+        streamId: "s1",
+        eventType: "created",
+        timestamp: 100,
+        actor: "GBAFGP7ZOCXGXPX6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6",
+        amount: 100,
+      },
+      {
+        id: 2,
+        streamId: "s1",
+        eventType: "claimed",
+        timestamp: 200,
+        actor: "GBAFGP7ZOCXGXPX6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6",
+        amount: 50,
+      },
+      {
+        id: 3,
+        streamId: "s1",
+        eventType: "canceled",
+        timestamp: 300,
+        actor: "GBAFGP7ZOCXGXPX6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6",
+      },
+      {
+        id: 4,
+        streamId: "s1",
+        eventType: "start_time_updated",
+        timestamp: 400,
+        actor: "GBAFGP7ZOCXGXPX6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6",
+      },
+    ];
+    (listAllEvents as any).mockResolvedValue(events);
+
+    render(<StreamTimeline />);
+
+    // Wait for content to load
+    await waitFor(() => expect(screen.getByText("Stream created")).toBeTruthy());
+
+    // Verify each event type
+    const eventTypes = [
+      { icon: "🚀", label: "Stream created" },
+      { icon: "💸", label: "Stream claimed" },
+      { icon: "❌", label: "Stream canceled" },
+      { icon: "🕐", label: "Start time updated" },
+    ];
+
+    for (const { icon, label } of eventTypes) {
+      expect(screen.getByText(icon)).toBeTruthy();
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+  });
+
+  it("renders 'no history' message when events array is empty", async () => {
+    (listAllEvents as any).mockResolvedValue([]);
+
+    render(<StreamTimeline />);
+
+    await waitFor(() =>
+      expect(screen.getByText("No activity to show yet.")).toBeTruthy(),
+    );
+    expect(screen.getByText("--")).toBeTruthy(); // Empty icon icon
+  });
+
+  it("renders events in ascending time order", async () => {
+    // Unordered timestamps: 200, 100, 300
+    const events: StreamEvent[] = [
+      { id: 2, streamId: "s1", eventType: "claimed", timestamp: 200, actor: "GBAFGP...Z5X6" },
+      { id: 1, streamId: "s1", eventType: "created", timestamp: 100, actor: "GBAFGP...Z5X6" },
+      { id: 3, streamId: "s1", eventType: "canceled", timestamp: 300, actor: "GBAFGP...Z5X6" },
+    ];
+    (listAllEvents as any).mockResolvedValue(events);
+
+    render(<StreamTimeline />);
+
+    await waitFor(() => expect(screen.getByText("Stream created")).toBeTruthy());
+
+    // Get all event titles and verify their order
+    const titles = screen
+      .getAllByText(/Stream (created|claimed|canceled)/)
+      .map((el) => el.textContent);
+    
+    // Ascending order expected based on timestamp: 100, 200, 300
+    expect(titles).toEqual([
+      "Stream created",
+      "Stream claimed",
+      "Stream canceled",
+    ]);
+  });
+
+  it("verifies actor and amount fields are shown when present", async () => {
+    const actorAddress = "GBAFGP7ZOCXGXPX6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6GZ5X6";
+    const events: StreamEvent[] = [
+      {
+        id: 1,
+        streamId: "s1",
+        eventType: "created",
+        timestamp: 100,
+        actor: actorAddress,
+        amount: 1234.56,
+      },
+    ];
+    (listAllEvents as any).mockResolvedValue(events);
+
+    render(<StreamTimeline />);
+
+    await waitFor(() => expect(screen.getByText("Stream created")).toBeTruthy());
+
+    // Check description for actor (truncated) and amount
+    // Component truncates actor to slice(0,6)...slice(-4)
+    expect(screen.getByText(/Initiated by GBAFGP...Z5X6 for 1234.56 tokens/i)).toBeTruthy();
+    
+    // Check CopyableAddress (truncates to 8 chars... for end mode)
+    expect(screen.getByText("GBAFGP7Z...")).toBeTruthy();
+  });
+
+  it("shows stream link in global feed but not in stream-specific view", async () => {
+    const events: StreamEvent[] = [
+      { id: 1, streamId: "stream-123", eventType: "created", timestamp: 100, actor: "GBAFGP...Z5X6" },
+    ];
+    
+    // Case 1: Global Feed (no streamId prop)
+    (listAllEvents as any).mockResolvedValue(events);
+    const { rerender } = render(<StreamTimeline />);
+    await waitFor(() => expect(screen.getByText("Stream stream-123")).toBeTruthy());
+    expect(screen.getByText(/Latest across all streams/i)).toBeTruthy();
+
+    // Case 2: Stream-specific view
+    (getStreamHistory as any).mockResolvedValue(events);
+    rerender(<StreamTimeline streamId="stream-123" />);
+    
+    // Wait for re-render/loading
+    await waitFor(() => expect(screen.queryByText(/Latest across all streams/i)).toBeNull());
+    expect(screen.queryByText("Stream stream-123")).toBeNull();
+  });
+});
+
