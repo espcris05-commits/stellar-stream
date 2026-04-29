@@ -1,10 +1,16 @@
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { FilterBar } from "./FilterBar";
 import { ListStreamsFilters } from "../services/api";
+import { useUrlFilters } from "../hooks/useUrlFilters";
 
 describe("FilterBar Component", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
   const mockFilters: ListStreamsFilters = {
     status: "",
     q: "",
@@ -68,5 +74,159 @@ describe("FilterBar Component", () => {
       sender: "",
       recipient: "",
     });
+  });
+});
+
+describe("FilterBar URL Sync Integration", () => {
+  const originalLocation = window.location;
+  const originalHistory = window.history;
+
+  beforeEach(() => {
+    // Mock window.location
+    delete (window as any).location;
+    (window as any).location = {
+      search: "",
+      pathname: "/",
+      href: "http://localhost/",
+    };
+
+    // Mock window.history
+    (window as any).history = {
+      replaceState: vi.fn(),
+      pushState: vi.fn(),
+      back: vi.fn(),
+      forward: vi.fn(),
+      go: vi.fn(),
+      length: 1,
+      state: null,
+    };
+  });
+
+  afterEach(() => {
+    // Restore original window.location and window.history
+    (window as any).location = originalLocation;
+    (window as any).history = originalHistory;
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("updates URL query param when status filter is changed to 'active'", () => {
+    const handleChange = vi.fn();
+    const mockFilters: ListStreamsFilters = {
+      status: "",
+      q: "",
+      asset: "",
+      sender: "",
+      recipient: "",
+    };
+
+    render(<FilterBar filters={mockFilters} onChange={handleChange} />);
+
+    const statusSelect = screen.getByLabelText(/Status/i);
+    fireEvent.change(statusSelect, { target: { value: "active" } });
+
+    expect(handleChange).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "active" })
+    );
+  });
+
+  it("restores filter state from URL on page load with ?status=completed", () => {
+    (window as any).location.search = "?status=completed";
+
+    const { filters } = useUrlFilters();
+
+    expect(filters.status).toBe("completed");
+  });
+
+  it("restores filter state from URL with multiple params", () => {
+    (window as any).location.search = "?status=active&asset=USDC";
+
+    const { filters } = useUrlFilters();
+
+    expect(filters.status).toBe("active");
+    expect(filters.asset).toBe("USDC");
+  });
+
+  it("clears URL params when all filters are reset", () => {
+    const handleChange = vi.fn();
+    const activeFilters: ListStreamsFilters = {
+      status: "active",
+      q: "test",
+      asset: "USDC",
+      sender: "",
+      recipient: "",
+    };
+
+    render(<FilterBar filters={activeFilters} onChange={handleChange} />);
+
+    const resetBtn = screen.getByText(/Reset All/i);
+    fireEvent.click(resetBtn);
+
+    expect(handleChange).toHaveBeenCalledWith({
+      status: "",
+      q: "",
+      asset: "",
+      sender: "",
+      recipient: "",
+    });
+  });
+
+  it("updates q param when search input has 3+ characters", () => {
+    const handleChange = vi.fn();
+    const mockFilters: ListStreamsFilters = {
+      status: "",
+      q: "",
+      asset: "",
+      sender: "",
+      recipient: "",
+    };
+
+    render(<FilterBar filters={mockFilters} onChange={handleChange} />);
+
+    const searchInput = screen.getByLabelText(/Search ID \/ Address/i);
+    fireEvent.change(searchInput, { target: { value: "abc", name: "q" } });
+
+    expect(handleChange).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "abc" })
+    );
+  });
+
+  it("updates q param when search input has more than 3 characters", () => {
+    const handleChange = vi.fn();
+    const mockFilters: ListStreamsFilters = {
+      status: "",
+      q: "",
+      asset: "",
+      sender: "",
+      recipient: "",
+    };
+
+    render(<FilterBar filters={mockFilters} onChange={handleChange} />);
+
+    const searchInput = screen.getByLabelText(/Search ID \/ Address/i);
+    fireEvent.change(searchInput, { target: { value: "test-id-123", name: "q" } });
+
+    expect(handleChange).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "test-id-123" })
+    );
+  });
+
+  it("handles invalid status values in URL by defaulting to empty", () => {
+    (window as any).location.search = "?status=invalid";
+
+    const { filters } = useUrlFilters();
+
+    expect(filters.status).toBe("");
+  });
+
+  it("handles empty URL params correctly", () => {
+    (window as any).location.search = "";
+
+    const { filters } = useUrlFilters();
+
+    expect(filters.status).toBe("");
+    expect(filters.asset).toBe("");
+    expect(filters.sender).toBe("");
+    expect(filters.recipient).toBe("");
   });
 });
