@@ -187,8 +187,8 @@ export interface StreamEvent {
   metadata?: Record<string, any>;
 }
 
-export async function getStreamHistory(streamId: string): Promise<StreamEvent[]> {
-  const response = await fetch(`${API_BASE}/streams/${streamId}/history`);
+export async function getStreamHistory(streamId: string, signal?: AbortSignal): Promise<StreamEvent[]> {
+  const response = await fetch(`${API_BASE}/streams/${streamId}/history`, { signal });
   const body = await parseResponse<{ data: StreamEvent[] }>(response);
   return body.data;
 }
@@ -199,8 +199,8 @@ export async function listAllEvents(): Promise<StreamEvent[]> {
   return body.data;
 }
 
-export async function getStream(streamId: string): Promise<Stream> {
-  const response = await fetch(`${API_BASE}/streams/${encodeURIComponent(streamId)}`);
+export async function getStream(streamId: string, signal?: AbortSignal): Promise<Stream> {
+  const response = await fetch(`${API_BASE}/streams/${encodeURIComponent(streamId)}`, { signal });
   const body = await parseResponse<{ data: Stream }>(response);
   return body.data;
 }
