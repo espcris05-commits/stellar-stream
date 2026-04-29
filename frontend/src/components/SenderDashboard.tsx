@@ -19,6 +19,8 @@ function statusClass(status: Stream["progress"]["status"]): string {
       return "badge badge-completed";
     case "canceled":
       return "badge badge-canceled";
+    case "paused":
+      return "badge badge-paused";
     default:
       return "badge";
   }

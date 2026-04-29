@@ -123,6 +123,34 @@ export async function cancelStream(streamId: string): Promise<Stream> {
   return body.data;
 }
 
+export async function pauseStream(streamId: string): Promise<Stream> {
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}/streams/${streamId}/pause`, {
+    method: "POST",
+    headers,
+  });
+  const body = await parseResponse<{ data: Stream }>(response);
+  return body.data;
+}
+
+export async function resumeStream(streamId: string): Promise<Stream> {
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}/streams/${streamId}/resume`, {
+    method: "POST",
+    headers,
+  });
+  const body = await parseResponse<{ data: Stream }>(response);
+  return body.data;
+}
+
 export async function updateStreamStartAt(
   streamId: string,
   startAt: number,
@@ -152,7 +180,7 @@ export async function listOpenIssues(): Promise<OpenIssue[]> {
 export interface StreamEvent {
   id: number;
   streamId: string;
-  eventType: "created" | "claimed" | "canceled" | "start_time_updated";
+  eventType: "created" | "claimed" | "canceled" | "start_time_updated" | "paused" | "resumed";
   timestamp: number;
   actor?: string;
   amount?: number;

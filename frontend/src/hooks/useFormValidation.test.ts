@@ -6,7 +6,7 @@ const validValues: FormValues = {
   recipient: "GDBX5ZID6H4G365G7O4W6U4E6U4E6U4E6U4E6U4E6U4E6U4E6U4E6U4E6U", // 56 chars, different from sender
   assetCode: "USDC",
   totalAmount: "100",
-  durationHours: "24",
+  durationMinutes: "1440",
   startInMinutes: "0",
 };
 
@@ -35,7 +35,7 @@ describe("useFormValidation", () => {
       recipient: "",
       assetCode: "",
       totalAmount: "",
-      durationHours: "",
+      durationMinutes: "",
       startInMinutes: "",
     };
 
@@ -46,7 +46,7 @@ describe("useFormValidation", () => {
     expect(errors.recipient).toBe("Account ID is required.");
     expect(errors.assetCode).toBe("Asset code is required.");
     expect(errors.totalAmount).toBe("Total amount is required.");
-    expect(errors.durationHours).toBe("Duration is required.");
+    expect(errors.durationMinutes).toBe("Duration is required.");
     expect(errors.startInMinutes).toBe("Enter 0 to start immediately, or a positive number of minutes.");
     
     expect(isFormValid(errors)).toBe(false);
@@ -78,13 +78,13 @@ describe("useFormValidation", () => {
     const invalidNumericValues: FormValues = {
       ...defaultValid,
       totalAmount: "-10",
-      durationHours: "0.5", // Must be integer >= 1
+      durationMinutes: "0", // Must be >= 1
       startInMinutes: "-5",
     };
 
     const errors = validateForm(invalidNumericValues);
     expect(errors.totalAmount).toMatch(/greater than zero/i);
-    expect(errors.durationHours).toBe("Duration must be a whole number of hours, minimum 1.");
+    expect(errors.durationMinutes).toBe("Duration must be at least 1 minute.");
     expect(errors.startInMinutes).toBe("Must be 0 or a positive whole number.");
     expect(isFormValid(errors)).toBe(false);
   });

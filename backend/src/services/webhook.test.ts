@@ -1,11 +1,3 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { getRetryDelaySeconds, triggerWebhook, getDeadLetters } from "./webhook";
-import { initDb, getDb } from "./db";
-import fs from "fs";
-import path from "path";
-
-const TEST_DB_PATH = path.join(__dirname, "..", "..", "data", "webhook-test.db");
-
 
 describe("Webhook Retry Logic", () => {
     it("should return correct retry delays", () => {

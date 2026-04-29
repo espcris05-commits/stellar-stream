@@ -1,4 +1,4 @@
-export type StreamStatus = "scheduled" | "active" | "completed" | "canceled";
+export type StreamStatus = "scheduled" | "active" | "paused" | "completed" | "canceled";
 
 export interface StreamProgress {
   status: StreamStatus;
@@ -19,6 +19,8 @@ export interface Stream {
   startAt: number;
   createdAt: number;
   canceledAt?: number;
+  pausedAt?: number;
+  pausedDuration?: number;
   progress: StreamProgress;
 }
 

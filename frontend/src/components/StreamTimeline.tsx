@@ -42,6 +42,8 @@ export const FILTER_BUTTONS: Array<{ type: EventType; label: string }> = [
   { type: "claimed", label: "Claimed" },
   { type: "canceled", label: "Canceled" },
   { type: "start_time_updated", label: "Start Time Updated" },
+  { type: "paused", label: "Paused" },
+  { type: "resumed", label: "Resumed" },
 ];
 
 export function FilterBar({ activeFilters, onToggle, onClear }: FilterBarProps) {

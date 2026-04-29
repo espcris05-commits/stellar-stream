@@ -106,8 +106,21 @@ function migrate(): void {
     CREATE INDEX IF NOT EXISTS idx_webhook_dead_letters_failed_at ON webhook_dead_letters(failed_at);
 
     CREATE TABLE IF NOT EXISTS indexer_cursor (
-      id TEXT PRIMARY KEY,
-      last_ledger INTEGER NOT NULL
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      last_ledger_sequence INTEGER NOT NULL
     );
   `);
+
+  // Incremental migrations — safe to run on existing databases.
+  const addColumnIfMissing = (table: string, column: string, definition: string) => {
+    const cols = db.pragma(`table_info(${table})`) as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+  };
+
+  addColumnIfMissing("streams", "paused_at", "INTEGER");
+  addColumnIfMissing("streams", "paused_duration", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing("stream_archive", "paused_at", "INTEGER");
+  addColumnIfMissing("stream_archive", "paused_duration", "INTEGER NOT NULL DEFAULT 0");
 }

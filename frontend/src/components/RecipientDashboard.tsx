@@ -99,6 +99,7 @@ function statusClass(status: Stream["progress"]["status"]): string {
     scheduled: "badge badge-scheduled",
     completed: "badge badge-completed",
     canceled: "badge badge-canceled",
+    paused: "badge badge-paused",
   };
   return map[status] ?? "badge";
 }

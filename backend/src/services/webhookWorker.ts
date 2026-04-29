@@ -1,7 +1,6 @@
 import axios from "axios";
 import { getDb } from "./db";
-import { getRetryDelaySeconds } from "./webhook";
-import { getWebhookHeaders } from "./webhookSignature";
+
 
 let isProcessing = false;
 let pollingInterval: NodeJS.Timeout | null = null;
@@ -44,7 +43,7 @@ export const processWebhookQueue = async () => {
           timestamp,
         };
         const bodyString = JSON.stringify(body);
-        const headers = getWebhookHeaders(bodyString, process.env.WEBHOOK_SIGNING_SECRET);
+
 
         await axios.post(url, bodyString, { headers });
         success = true;

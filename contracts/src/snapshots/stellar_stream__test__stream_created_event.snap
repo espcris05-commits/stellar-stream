@@ -12,5 +12,6 @@ StreamCreated {
     total_amount: 1000,
     start_time: 100,
     end_time: 200,
+    cliff_seconds: 0,
     metadata: None,
 }

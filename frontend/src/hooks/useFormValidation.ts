@@ -15,7 +15,7 @@ export interface FieldErrors {
   recipient?: string;
   assetCode?: string;
   totalAmount?: string;
-  durationHours?: string;
+  durationMinutes?: string;
   startInMinutes?: string;
 }
 
@@ -24,7 +24,7 @@ export interface FormValues {
   recipient: string;
   assetCode: string;
   totalAmount: string;
-  durationHours: string;
+  durationMinutes: string;
   startInMinutes: string;
 }
 
@@ -94,11 +94,11 @@ export function validateForm(values: FormValues): FieldErrors {
   }
 
   // --- Duration ---
-  const durationNum = Number(values.durationHours);
-  if (values.durationHours === "" || isNaN(durationNum)) {
-    errors.durationHours = "Duration is required.";
+  const durationNum = Number(values.durationMinutes);
+  if (values.durationMinutes === "" || isNaN(durationNum)) {
+    errors.durationMinutes = "Duration is required.";
   } else if (!Number.isInteger(durationNum) || durationNum < 1) {
-    errors.durationHours = "Duration must be a whole number of hours, minimum 1.";
+    errors.durationMinutes = "Duration must be at least 1 minute.";
   }
 
   // --- Start in minutes (optional, 0 = start immediately) ---

@@ -1,6 +1,6 @@
 import { getDb } from "./db";
 
-export type StreamEventType = "created" | "claimed" | "canceled" | "start_time_updated";
+export type StreamEventType = "created" | "claimed" | "canceled" | "start_time_updated" | "paused" | "resumed";
 
 export interface StreamEvent {
   id: number;

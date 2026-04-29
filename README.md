@@ -333,10 +333,20 @@ The backend validates all environment variables **at startup**. If a required va
 
 ### Webhook signing
 
-- Header: `X-Webhook-Signature`
+- Header: `X-StellarStream-Signature`
 - Format: `sha256=<hex-digest>`
 - Digest input: raw JSON request body string
 - Algorithm: HMAC-SHA256 using `WEBHOOK_SIGNING_SECRET`
+
+To verify a delivery, compute `sha256=` + HMAC-SHA256 of the raw request body using your `WEBHOOK_SIGNING_SECRET` and compare it to the `X-StellarStream-Signature` header value using a constant-time comparison.
+
+Example (Node.js):
+```js
+const { createHmac, timingSafeEqual } = require("crypto");
+const expected = "sha256=" + createHmac("sha256", secret).update(rawBody).digest("hex");
+const received = req.headers["x-stellarstream-signature"];
+const valid = timingSafeEqual(Buffer.from(expected), Buffer.from(received));
+```
 
 If `WEBHOOK_DESTINATION_URL` is set without `WEBHOOK_SIGNING_SECRET`, webhooks are delivered unsigned and a warning is logged at startup.
 

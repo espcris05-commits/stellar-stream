@@ -2,6 +2,7 @@ import cors from "cors";
 import { requestLogger } from "./middleware/requestLogger";
 import "dotenv/config";
 import express, { NextFunction, Request, Response } from "express";
+import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import { z } from "zod";
 import {
@@ -11,7 +12,6 @@ import {
   sendValidationError,
 } from "./apiErrors";
 import { swaggerDocument } from "./swagger";
-
 import {
   countAllEvents,
   getAllEvents,
@@ -21,6 +21,7 @@ import {
 } from "./services/eventHistory";
 import { fetchOpenIssues } from "./services/openIssues";
 import { initIndexer, startIndexer, getCircuitBreakerStatus } from "./services/indexer";
+
 import { startReconciliationJob } from "./services/reconciliationJob";
 import { startWebhookWorker } from "./services/webhookWorker";
 import { getDeadLetters, countDeadLetters } from "./services/webhook";
@@ -55,15 +56,13 @@ import {
   senderAccountIdSchema,
   streamIdSchema,
   updateStreamStartAtSchema,
-  webhookRegistrationSchema,
 } from "./validation/schemas";
 import { validateEnv } from "./config/validateEnv";
-
-
 
 const STREAM_STATUSES: StreamStatus[] = [
   "scheduled",
   "active",
+  "paused",
   "completed",
   "canceled",
 ];
@@ -105,9 +104,28 @@ const listStreamsQuerySchema = z.object({
   limit: z
     .coerce.number()
     .int("limit must be an integer")
-    .min(1, "limit must be greater than or equal to 1")
+    .min(1, "limit must be an integer")
     .max(PAGINATION_MAX_LIMIT, `limit must be less than or equal to ${PAGINATION_MAX_LIMIT}`)
     .optional(),
+});
+
+const AUTH_CHALLENGE_RATE_LIMIT = Number(process.env.AUTH_CHALLENGE_RATE_LIMIT ?? 10);
+
+const authChallengeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: AUTH_CHALLENGE_RATE_LIMIT,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req: Request, res: Response) => {
+    const resetTime = (req as any).rateLimit?.resetTime;
+    const retryAfter = resetTime
+      ? Math.ceil((resetTime.getTime() - Date.now()) / 1000)
+      : 60;
+    res.set("Retry-After", String(Math.max(1, retryAfter)));
+    sendApiError(req, res, 429, "Too many requests. Please try again later.", {
+      code: "RATE_LIMIT_EXCEEDED",
+    });
+  },
 });
 
 app.use(cors());
@@ -146,16 +164,32 @@ app.get("/api/health", (_req: Request, res: Response) => {
   });
 });
 
-app.get("/api/metrics", (_req: Request, res: Response) => {
-  res.json({
-    indexer_circuit_breaker: getCircuitBreakerStatus(),
-  });
+const METRICS_AUTH = process.env.METRICS_AUTH?.trim() || null; // format: "user:password"
+
+app.get("/api/metrics", async (_req: Request, res: Response) => {
+  // Optional basic auth check
+  if (METRICS_AUTH) {
+    const authHeader = _req.headers.authorization;
+    const expected = "Basic " + Buffer.from(METRICS_AUTH).toString("base64");
+    if (!authHeader || authHeader !== expected) {
+      res.setHeader("WWW-Authenticate", 'Basic realm="metrics"');
+      res.status(401).send("Unauthorized");
+      return;
+    }
+  }
+
+  const output = await metricsRegistry.metrics();
+  res.setHeader("Content-Type", "text/plain; version=0.0.4");
+  res.send(output);
 });
 
 app.get("/api/assets", (_req: Request, res: Response) => {
   res.json({
     data: ALLOWED_ASSETS,
   });
+});
+
+
 });
 
 app.get("/api/streams", (req: Request, res: Response) => {
@@ -247,7 +281,6 @@ app.get("/api/events", (req: Request, res: Response) => {
   res.json({ data, total, page, limit });
 });
 
-
 app.get("/api/streams/export.csv", (req: Request, res: Response) => {
   const parsedQuery = listStreamsQuerySchema.safeParse(req.query);
   if (!parsedQuery.success) {
@@ -338,7 +371,6 @@ app.get("/api/recipients/:accountId/streams", (req: Request, res: Response) => {
       progress: calculateProgress(stream),
     }));
 
-  // Apply filters
   if (query.status) {
     data = data.filter((stream) => stream.progress.status === query.status);
   }
@@ -364,7 +396,6 @@ app.get("/api/recipients/:accountId/streams", (req: Request, res: Response) => {
     });
   }
 
-  // Apply pagination
   const hasPage = req.query.page !== undefined;
   const hasLimit = req.query.limit !== undefined;
 
@@ -451,7 +482,7 @@ app.get("/api/senders/:accountId/streams", (req: Request, res: Response) => {
   });
 });
 
-app.get("/api/auth/challenge", (req: Request, res: Response) => {
+app.get("/api/auth/challenge", authChallengeLimiter, (req: Request, res: Response) => {
   const accountId = req.query.accountId;
   if (typeof accountId !== "string" || !accountId.trim()) {
     sendApiError(req, res, 400, "accountId query parameter is required.", {
@@ -464,15 +495,12 @@ app.get("/api/auth/challenge", (req: Request, res: Response) => {
     const challengeTransaction = generateChallenge(accountId.trim());
     res.json({ transaction: challengeTransaction });
   } catch (error: any) {
-    console.error("Failed to generate challenge:", error);
-    const normalizedError = normalizeUnknownApiError(error, "Failed to generate challenge.");
-    sendApiError(req, res, normalizedError.statusCode, normalizedError.message, {
-      code: normalizedError.code ?? "INTERNAL_ERROR",
+
     });
   }
 });
 
-app.post("/api/auth/token", (req: Request, res: Response) => {
+app.post("/api/auth/token", async (req: Request, res: Response) => {
   const transaction = req.body?.transaction;
   if (typeof transaction !== "string" || !transaction.trim()) {
     sendApiError(req, res, 400, "transaction in body is required.", {
@@ -482,12 +510,10 @@ app.post("/api/auth/token", (req: Request, res: Response) => {
   }
 
   try {
-    const token = verifyChallengeAndIssueToken(transaction);
+    const token = await verifyChallengeAndIssueToken(transaction);
     res.json({ token });
   } catch (error: any) {
-    console.error("Failed to verify challenge:", error);
-    sendApiError(req, res, 401, error.message || "Challenge verification failed.", {
-      code: "UNAUTHORIZED",
+
     });
   }
 });
@@ -548,11 +574,80 @@ app.post(
     }
 
     try {
-      const canceledStream = await cancelStream(parsedId.value);
-      res.json({ data: { ...canceledStream, progress: calculateProgress(canceledStream) } });
+
     } catch (error: any) {
       console.error("Failed to cancel stream:", error);
       const normalizedError = normalizeUnknownApiError(error, "Failed to cancel stream.");
+      sendApiError(req, res, normalizedError.statusCode, normalizedError.message, {
+        code: normalizedError.code ?? "INTERNAL_ERROR",
+      });
+    }
+  },
+);
+
+// POST /api/streams/:id/pause — sender pauses an active stream
+app.post(
+  "/api/streams/:id/pause",
+  authMiddleware,
+  (req: Request, res: Response) => {
+    const parsedId = parseStreamId(req.params.id);
+    if (!parsedId.ok) {
+      sendValidationError(req, res, parsedId.issues);
+      return;
+    }
+
+    const stream = getStream(parsedId.value);
+    if (!stream) {
+      sendApiError(req, res, 404, "Stream not found.", { code: "NOT_FOUND" });
+      return;
+    }
+
+    const user = (req as any).user;
+    if (stream.sender !== user.accountId) {
+      sendApiError(req, res, 403, "Only the sender can pause this stream.", { code: "FORBIDDEN" });
+      return;
+    }
+
+    try {
+      const updated = pauseStream(parsedId.value);
+      res.json({ data: { ...updated, progress: calculateProgress(updated) } });
+    } catch (error: any) {
+      const normalizedError = normalizeUnknownApiError(error, "Failed to pause stream.");
+      sendApiError(req, res, normalizedError.statusCode, normalizedError.message, {
+        code: normalizedError.code ?? "INTERNAL_ERROR",
+      });
+    }
+  },
+);
+
+// POST /api/streams/:id/resume — sender resumes a paused stream
+app.post(
+  "/api/streams/:id/resume",
+  authMiddleware,
+  (req: Request, res: Response) => {
+    const parsedId = parseStreamId(req.params.id);
+    if (!parsedId.ok) {
+      sendValidationError(req, res, parsedId.issues);
+      return;
+    }
+
+    const stream = getStream(parsedId.value);
+    if (!stream) {
+      sendApiError(req, res, 404, "Stream not found.", { code: "NOT_FOUND" });
+      return;
+    }
+
+    const user = (req as any).user;
+    if (stream.sender !== user.accountId) {
+      sendApiError(req, res, 403, "Only the sender can resume this stream.", { code: "FORBIDDEN" });
+      return;
+    }
+
+    try {
+      const updated = resumeStream(parsedId.value);
+      res.json({ data: { ...updated, progress: calculateProgress(updated) } });
+    } catch (error: any) {
+      const normalizedError = normalizeUnknownApiError(error, "Failed to resume stream.");
       sendApiError(req, res, normalizedError.statusCode, normalizedError.message, {
         code: normalizedError.code ?? "INTERNAL_ERROR",
       });
@@ -650,8 +745,7 @@ app.patch(
     }
 
     const user = (req as any).user;
-    if (user && existingStream.sender !== user.accountId) {
-      sendApiError(req, res, 403, "Only stream sender can update the start time.", {
+
         code: "FORBIDDEN",
       });
       return;
@@ -663,88 +757,7 @@ app.patch(
       return;
     }
 
-    try {
-      const updatedStream = updateStreamStartAt(parsedId.value, parsedBody.data.startAt);
-      res.json({ data: { ...updatedStream, progress: calculateProgress(updatedStream) } });
-    } catch (error: any) {
-      const normalizedError = normalizeUnknownApiError(
-        error,
-        "Failed to update stream start time.",
-      );
-      sendApiError(req, res, normalizedError.statusCode, normalizedError.message, {
-        code: normalizedError.code ?? "INTERNAL_ERROR",
-      });
-    }
-  },
-);
 
-app.patch(
-  "/api/streams/:id/pause",
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    const parsedId = parseStreamId(req.params.id);
-    if (!parsedId.ok) {
-      sendValidationError(req, res, parsedId.issues);
-      return;
-    }
-
-    const stream = getStream(parsedId.value);
-    if (!stream) {
-      sendApiError(req, res, 404, "Stream not found.", { code: "NOT_FOUND" });
-      return;
-    }
-
-    const user = (req as any).user;
-    if (stream.sender !== user.accountId) {
-      sendApiError(req, res, 403, "Only the sender can pause this stream.", {
-        code: "FORBIDDEN",
-      });
-      return;
-    }
-
-    try {
-      const pausedStream = await pauseStream(parsedId.value);
-      res.json({ data: { ...pausedStream, progress: calculateProgress(pausedStream!) } });
-    } catch (error: any) {
-      console.error("Failed to pause stream:", error);
-      const normalizedError = normalizeUnknownApiError(error, "Failed to pause stream.");
-      sendApiError(req, res, normalizedError.statusCode, normalizedError.message, {
-        code: normalizedError.code ?? "INTERNAL_ERROR",
-      });
-    }
-  },
-);
-
-app.patch(
-  "/api/streams/:id/resume",
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    const parsedId = parseStreamId(req.params.id);
-    if (!parsedId.ok) {
-      sendValidationError(req, res, parsedId.issues);
-      return;
-    }
-
-    const stream = getStream(parsedId.value);
-    if (!stream) {
-      sendApiError(req, res, 404, "Stream not found.", { code: "NOT_FOUND" });
-      return;
-    }
-
-    const user = (req as any).user;
-    if (stream.sender !== user.accountId) {
-      sendApiError(req, res, 403, "Only the sender can resume this stream.", {
-        code: "FORBIDDEN",
-      });
-      return;
-    }
-
-    try {
-      const resumedStream = await resumeStream(parsedId.value);
-      res.json({ data: { ...resumedStream, progress: calculateProgress(resumedStream!) } });
-    } catch (error: any) {
-      console.error("Failed to resume stream:", error);
-      const normalizedError = normalizeUnknownApiError(error, "Failed to resume stream.");
       sendApiError(req, res, normalizedError.statusCode, normalizedError.message, {
         code: normalizedError.code ?? "INTERNAL_ERROR",
       });
@@ -776,6 +789,22 @@ app.get("/api/streams/:id/history", (req: Request, res: Response) => {
   const data = getStreamHistory(parsedId.value, limit, offset);
 
   res.json({ data, total, limit, offset });
+});
+
+app.get("/api/streams/:id/history/summary", (req: Request, res: Response) => {
+  const parsedId = parseStreamId(req.params.id);
+  if (!parsedId.ok) {
+    sendValidationError(req, res, parsedId.issues);
+    return;
+  }
+
+  const stream = getStream(parsedId.value);
+  if (!stream) {
+    sendApiError(req, res, 404, "Stream not found.", { code: "NOT_FOUND" });
+    return;
+  }
+
+  res.json({ data: getStreamEventSummary(parsedId.value) });
 });
 
 app.get("/api/streams/:id/snapshot", (req: Request, res: Response) => {
@@ -852,62 +881,16 @@ app.get("/api/webhooks/dead-letters", authMiddleware, (req: Request, res: Respon
   }
 });
 
-
-
-
 async function startServer() {
-  // ── Validate environment first — exits with code 1 on bad config ──────
   const config = validateEnv();
 
   await initSoroban();
   await syncStreams();
 
-  // Run refreshStreamStatuses on startup and then on a configurable interval.
-  // STATUS_REFRESH_INTERVAL_MS=0 disables automatic refresh.
-  const statusRefreshInterval = Number(
-    process.env.STATUS_REFRESH_INTERVAL_MS ?? 60_000,
-  );
-  const runRefresh = () => {
-    try {
-      const transitioned = refreshStreamStatuses();
-      if (transitioned > 0) {
-        console.log(
-          `[status-refresh] ${transitioned} stream(s) transitioned to completed`,
-        );
-      }
-    } catch (err) {
-      console.error("[status-refresh] failed:", err);
-    }
-  };
-  runRefresh(); // run once on startup
-  if (statusRefreshInterval > 0) {
-    setInterval(runRefresh, statusRefreshInterval);
-    console.log(
-      `[status-refresh] scheduled every ${statusRefreshInterval}ms`,
-    );
-  } else {
-    console.log("[status-refresh] automatic refresh disabled (interval=0)");
-  }
 
-  // Archive old streams on startup
-  await archiveOldStreams();
-
-  // Schedule archive job to run every 24 hours
-  setInterval(async () => {
-    try {
-      const archived = await archiveOldStreams();
-      if (archived > 0) {
-        console.log(`[scheduler] archived ${archived} stream(s)`);
-      }
-    } catch (err) {
-      console.error("[scheduler] archive job failed:", err);
-    }
-  }, 24 * 60 * 60 * 1000);
-
-  // Initialize and start event indexer
   if (config.sorobanEnabled && config.contractId) {
     initIndexer(config.rpcUrl, config.contractId, config.networkPassphrase);
-    startIndexer(10000); // Poll every 10 seconds
+    startIndexer(10000);
     startReconciliationJob(
       Number(process.env.RECONCILIATION_INTERVAL_MS ?? 60000),
     );

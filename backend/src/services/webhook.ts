@@ -1,4 +1,9 @@
+import { createHmac } from "crypto";
 import { getDb } from "./db";
+
+export function computeSignature(secret: string, body: string): string {
+  return `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+}
 
 const MAX_RETRIES = 5;
 const RETRY_DELAYS = [5, 15, 60, 300, 900]; // seconds: 5s, 15s, 60s, 300s, 900s

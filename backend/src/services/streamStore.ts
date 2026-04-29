@@ -16,7 +16,7 @@ import { recordEventWithDb } from "./eventHistory";
 import { streamHasEvent } from "./eventHistory";
 import { triggerWebhook } from "./webhook";
 
-export type StreamStatus = "scheduled" | "active" | "completed" | "canceled";
+export type StreamStatus = "scheduled" | "active" | "paused" | "completed" | "canceled";
 
 export interface StreamInput {
   sender: string;
@@ -83,6 +83,7 @@ function rowToRecord(row: StreamRow): StreamRecord {
     completedAt: row.completed_at ?? undefined,
     refundedAmount: row.refunded_amount ?? undefined,
     pausedAt: row.paused_at ?? undefined,
+    pausedDuration: row.paused_duration ?? 0,
     pausedDuration: row.paused_duration,
   };
 }
@@ -321,6 +322,8 @@ async function fetchOnChainStreamRecord(
     startAt: Number(streamData.start_time),
     createdAt: Number(streamData.start_time),
     canceledAt: streamData.canceled ? nowInSeconds() : undefined,
+    pausedAt: streamData.paused_at ? Number(streamData.paused_at) : undefined,
+    pausedDuration: Number(streamData.paused_duration ?? 0),
   };
 
   setCached(cacheKey, result, 5);
@@ -358,6 +361,9 @@ function computeStatus(stream: StreamRecord, at: number): StreamStatus {
   if (stream.completedAt !== undefined) {
     return "completed";
   }
+  if (stream.pausedAt !== undefined) {
+    return "paused";
+  }
   if (at < stream.startAt) {
     return "scheduled";
   }
@@ -384,6 +390,14 @@ export function calculateProgress(
 
   const effectiveEnd =
     stream.canceledAt !== undefined
+      ? Math.min(stream.canceledAt, streamEnd)
+      : streamEnd;
+
+  // When paused, vesting is frozen at the moment of pause.
+  const effectiveAt =
+    stream.pausedAt !== undefined ? Math.min(at, stream.pausedAt) : at;
+
+  const elapsed = Math.max(0, Math.min(effectiveAt, effectiveEnd) - stream.startAt);
       ? Math.min(stream.canceledAt, streamEnd + pausedDuration)
       : streamEnd + pausedDuration;
   
@@ -614,6 +628,7 @@ export async function createStream(input: StreamInput): Promise<StreamRecord> {
     durationSeconds: input.durationSeconds,
     startAt,
     createdAt: nowInSeconds(),
+    pausedDuration: 0,
   };
 
   // Atomically write the stream row and the creation event.
@@ -947,8 +962,66 @@ export async function cancelStream(
   return stream;
 }
 
-export function updateStreamStartAt(
-  id: string,
+export function pauseStream(id: string): StreamRecord {
+  const stream = getStream(id);
+  if (!stream) {
+    const err: any = new Error("Stream not found.");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const status = computeStatus(stream, nowInSeconds());
+  if (status !== "active") {
+    const err: any = new Error("Only active streams can be paused.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  stream.pausedAt = nowInSeconds();
+  const db = getDb();
+  db.transaction(() => {
+    upsertStream(stream);
+    recordEventWithDb(db, stream.id, "paused", stream.pausedAt!, stream.sender);
+  })();
+
+  triggerWebhook("paused", stream);
+  return stream;
+}
+
+export function resumeStream(id: string): StreamRecord {
+  const stream = getStream(id);
+  if (!stream) {
+    const err: any = new Error("Stream not found.");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (stream.pausedAt === undefined) {
+    const err: any = new Error("Stream is not paused.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const now = nowInSeconds();
+  const elapsed = now - stream.pausedAt;
+  stream.pausedDuration = (stream.pausedDuration ?? 0) + elapsed;
+  // Extend the effective duration so the recipient doesn't lose vesting time.
+  stream.durationSeconds += elapsed;
+  stream.pausedAt = undefined;
+
+  const db = getDb();
+  db.transaction(() => {
+    upsertStream(stream);
+    recordEventWithDb(db, stream.id, "resumed", now, stream.sender, undefined, {
+      pausedDuration: stream.pausedDuration,
+    });
+  })();
+
+  triggerWebhook("resumed", stream);
+  return stream;
+}
+
+export function updateStreamStartAt(  id: string,
   newStartAt: number,
 ): StreamRecord {
   const stream = getStream(id);

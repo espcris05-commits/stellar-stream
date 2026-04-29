@@ -84,7 +84,7 @@ export const updateStreamStartAtSchema = z.object({
   startAt: unixTimestampSchema,
 });
 
-const VALID_EVENT_TYPES = ["created", "claimed", "canceled", "start_time_updated"] as const;
+const VALID_EVENT_TYPES = ["created", "claimed", "canceled", "start_time_updated", "paused", "resumed"] as const;
 
 export const webhookRegistrationSchema = z.object({
   url: z

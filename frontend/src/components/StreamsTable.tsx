@@ -1,6 +1,6 @@
-import { useMemo, useState, useRef, type RefObject } from "react";
+
 import { Stream } from "../types/stream";
-import { getExportCsvUrl, ListStreamsFilters } from "../services/api";
+import { getExportCsvUrl, ListStreamsFilters, cancelStream } from "../services/api";
 import { CopyableAddress } from "./CopyableAddress";
 import { StreamTimeline } from "./StreamTimeline";
 import { getHealthBadges } from "../utils/streamHealthBadges";
@@ -11,6 +11,8 @@ interface StreamsTableProps {
   filters: ListStreamsFilters;
   onFiltersChange: (f: ListStreamsFilters) => void;
   onCancel: (streamId: string) => Promise<void>;
+  onPause: (streamId: string) => Promise<void>;
+  onResume: (streamId: string) => Promise<void>;
   onOpenStream?: (streamId: string) => void;
   /**
    * Called when the user clicks "Edit" for a scheduled stream.
@@ -25,6 +27,7 @@ function statusClass(status: Stream["progress"]["status"]): string {
     case "scheduled": return "badge badge-scheduled";
     case "completed": return "badge badge-completed";
     case "canceled":  return "badge badge-canceled";
+    case "paused":    return "badge badge-paused";
     default:          return "badge";
   }
 }
@@ -33,20 +36,99 @@ function formatTimestamp(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleString();
 }
 
-export function StreamsTable({
-  streams,
-  filters,
-  onFiltersChange,
-  onCancel,
-  onEditStartTime,
-  onOpenStream,
-}: StreamsTableProps) {
-  const [expandedStreamId, setExpandedStreamId] = useState<string | null>(null);
-  const exportUrl = useMemo(() => getExportCsvUrl(filters as Record<string, string>), [filters]);
 
-  const toggleTimeline = (streamId: string) => {
-    setExpandedStreamId((prev) => (prev === streamId ? null : streamId));
+
+
   };
+
+  // Helper: determine if a stream is eligible for selection (active or scheduled)
+  const isStreamSelectable = (stream: Stream): boolean => {
+    return stream.progress.status === "active" || stream.progress.status === "scheduled";
+  };
+
+  // Get all selectable streams on current page
+  const selectableStreams = streams.filter(isStreamSelectable);
+  const selectableIds = new Set(selectableStreams.map((s) => s.id));
+
+  // Determine if all selectable streams are selected
+  const allSelectableSelected =
+    selectableStreams.length > 0 &&
+    selectableStreams.every((stream) => selectedStreamIds.has(stream.id));
+
+  // Handle individual checkbox toggle
+  const handleCheckboxToggle = (streamId: string) => {
+    setSelectedStreamIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(streamId)) {
+        next.delete(streamId);
+      } else {
+        next.add(streamId);
+      }
+      return next;
+    });
+  };
+
+  // Handle "Select All" toggle
+  const handleSelectAllToggle = () => {
+    if (allSelectableSelected) {
+      // Deselect all on current page
+      setSelectedStreamIds((prev) => {
+        const next = new Set(prev);
+        selectableIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      // Select all selectable on current page
+      setSelectedStreamIds((prev) => {
+        const next = new Set(prev);
+        selectableIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  // Sequential bulk cancellation
+  const handleBulkCancel = async () => {
+    const idsToCancel = Array.from(selectedStreamIds);
+    if (idsToCancel.length === 0) return;
+
+    setIsBulkCanceling(true);
+    setBulkCancelProgress({ current: 0, total: idsToCancel.length });
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    // Sequential execution: call cancelStream one by one
+    for (let i = 0; i < idsToCancel.length; i++) {
+      const streamId = idsToCancel[i];
+      setBulkCancelProgress({ current: i + 1, total: idsToCancel.length });
+
+      try {
+        await cancelStream(streamId);
+        successCount++;
+      } catch (error) {
+        console.error(`Failed to cancel stream ${streamId}:`, error);
+        failureCount++;
+      }
+    }
+
+    // Cleanup: clear selection and refresh table
+    setSelectedStreamIds(new Set());
+    setIsBulkCanceling(false);
+    setBulkCancelProgress({ current: 0, total: 0 });
+
+    // Trigger refresh if callback provided
+    if (onRefresh) {
+      onRefresh();
+    }
+
+    // Optional: Show success toast (simple console log for now)
+    console.log(
+      `Bulk cancellation complete: ${successCount} succeeded, ${failureCount} failed`
+    );
+  };
+
+
 
   return (
     <div className="card">
@@ -65,23 +147,9 @@ export function StreamsTable({
         </a>
       </div>
 
-      {streams.length === 0 ? (
-        <p className="muted">No streams match your filters.</p>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Route</th>
-                <th>Asset</th>
-                <th>Progress</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
+
             <tbody>
-              {streams.map((stream) => {
+              {sortedStreams.map((stream) => {
                 const isScheduled = stream.progress.status === "scheduled";
                 const isFinalised =
                   stream.progress.status === "completed" ||
@@ -99,6 +167,8 @@ export function StreamsTable({
                     healthBadges={healthBadges}
                     onToggleTimeline={toggleTimeline}
                     onCancel={onCancel}
+                    onPause={onPause}
+                    onResume={onResume}
                     onEditStartTime={onEditStartTime}
                     onOpenStream={onOpenStream}
                   />
@@ -108,10 +178,67 @@ export function StreamsTable({
           </table>
         </div>
       )}
-    </div>
+      </div>
+
+      {/* Floating Action Bar */}
+      {selectedStreamIds.size > 0 && (
+        <BulkActionBar
+          selectedCount={selectedStreamIds.size}
+          onCancel={handleBulkCancel}
+          isCanceling={isBulkCanceling}
+          progress={bulkCancelProgress}
+        />
+      )}
+    </>
   );
 }
 
+/**
+ * BulkActionBar Component
+ * 
+ * Floating action bar that appears at the bottom of the viewport when streams are selected.
+ * Provides visual feedback during bulk cancellation operations.
+ * 
+ * Features:
+ * - Fixed positioning with high z-index (1000) to stay above other content
+ * - Slide-up animation on mount
+ * - Shows selected count and cancel button
+ * - Displays progress during cancellation (e.g., "Canceling 3/10...")
+ * - Button is disabled during operation to prevent duplicate submissions
+ * - Responsive design: centered on desktop, full-width on mobile
+ */
+interface BulkActionBarProps {
+  selectedCount: number;
+  onCancel: () => void;
+  isCanceling: boolean;
+  progress: { current: number; total: number };
+}
+
+function BulkActionBar({
+  selectedCount,
+  onCancel,
+  isCanceling,
+  progress,
+}: BulkActionBarProps) {
+  return (
+    <div className="bulk-action-bar">
+      <div className="bulk-action-bar__content">
+        <span className="bulk-action-bar__count">
+          {selectedCount} stream{selectedCount !== 1 ? "s" : ""} selected
+        </span>
+        <button
+          className="bulk-action-bar__button"
+          onClick={onCancel}
+          disabled={isCanceling}
+        >
+          {isCanceling
+            ? `Canceling ${progress.current}/${progress.total}...`
+            : `Cancel ${selectedCount} Stream${selectedCount !== 1 ? "s" : ""}`}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ── StreamRow ─────────────────────────────────────────────────────────────
 // Extracted so each row can hold its own triggerRef without polluting the
@@ -125,6 +252,8 @@ interface StreamRowProps {
   healthBadges: ReturnType<typeof getHealthBadges>;
   onToggleTimeline: (id: string) => void;
   onCancel: (id: string) => Promise<void>;
+  onPause: (id: string) => Promise<void>;
+  onResume: (id: string) => Promise<void>;
   onEditStartTime: StreamsTableProps["onEditStartTime"];
   onOpenStream?: (streamId: string) => void;
 }
@@ -137,6 +266,8 @@ function StreamRow({
   healthBadges,
   onToggleTimeline,
   onCancel,
+  onPause,
+  onResume,
   onEditStartTime,
   onOpenStream,
 }: StreamRowProps) {
@@ -145,6 +276,8 @@ function StreamRow({
    * Passed to the modal so focus returns here when the modal closes.
    */
   const editBtnRef = useRef<HTMLButtonElement>(null);
+  const isPaused = stream.progress.status === "paused";
+  const isActive = stream.progress.status === "active";
 
   return (
     <>
@@ -223,6 +356,26 @@ function StreamRow({
                 ✏️ Edit
               </button>
             )}
+            {isActive && (
+              <button
+                className="btn-ghost"
+                type="button"
+                aria-label={`Pause stream ${stream.id}`}
+                onClick={() => onPause(stream.id)}
+              >
+                ⏸ Pause
+              </button>
+            )}
+            {isPaused && (
+              <button
+                className="btn-ghost"
+                type="button"
+                aria-label={`Resume stream ${stream.id}`}
+                onClick={() => onResume(stream.id)}
+              >
+                ▶ Resume
+              </button>
+            )}
             <button
               className="btn-ghost"
               type="button"
@@ -252,4 +405,3 @@ function StreamRow({
     </>
   );
 }
-

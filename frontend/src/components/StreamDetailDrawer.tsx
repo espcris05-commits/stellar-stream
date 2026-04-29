@@ -21,6 +21,7 @@ function statusClass(status: Stream["progress"]["status"]): string {
     scheduled: "badge badge-scheduled",
     completed: "badge badge-completed",
     canceled: "badge badge-canceled",
+    paused: "badge badge-paused",
   };
   return map[status] ?? "badge";
 }
@@ -31,6 +32,8 @@ function eventIcon(type: StreamEvent["eventType"]): string {
     claimed: "↓",
     canceled: "✕",
     start_time_updated: "✎",
+    paused: "⏸",
+    resumed: "▶",
   };
   return icons[type] ?? "•";
 }
@@ -41,6 +44,8 @@ function eventLabel(type: StreamEvent["eventType"]): string {
     claimed: "Tokens claimed",
     canceled: "Stream canceled",
     start_time_updated: "Start time updated",
+    paused: "Stream paused",
+    resumed: "Stream resumed",
   };
   return labels[type] ?? type;
 }

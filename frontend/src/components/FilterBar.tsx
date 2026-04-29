@@ -10,6 +10,7 @@ const STATUS_OPTIONS = [
   { label: "All Statuses", value: "" },
   { label: "Scheduled", value: "scheduled" },
   { label: "Active", value: "active" },
+  { label: "Paused", value: "paused" },
   { label: "Completed", value: "completed" },
   { label: "Canceled", value: "canceled" },
 ];

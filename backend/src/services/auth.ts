@@ -9,6 +9,8 @@ import crypto from "crypto";
 import { Request, Response, NextFunction } from "express";
 import { sendApiError } from "../apiErrors";
 
+const HORIZON_URL = (process.env.HORIZON_URL || "https://horizon-testnet.stellar.org").trim();
+
 const SERVER_SIGNING_KEY =
   process.env.SERVER_SIGNING_KEY || (process.env.NODE_ENV === 'production' 
     ? ((): string => { throw new Error("SERVER_SIGNING_KEY must be set in production") })() 
@@ -37,6 +39,48 @@ export function getJwtSecret() {
 
 export interface AuthUser {
   accountId: string;
+  signer_count?: number;
+  threshold?: number;
+}
+
+interface HorizonSigner {
+  key: string;
+  weight: number;
+  type: string;
+}
+
+interface HorizonAccountThresholds {
+  low_threshold: number;
+  med_threshold: number;
+  high_threshold: number;
+}
+
+interface HorizonAccountResponse {
+  signers: HorizonSigner[];
+  thresholds: HorizonAccountThresholds;
+}
+
+/**
+ * Fetches account signers and thresholds from Horizon.
+ * Returns null if the account doesn't exist (unfunded) or on network error.
+ */
+async function fetchAccountSigners(
+  accountId: string,
+): Promise<{ signers: string[]; threshold: number } | null> {
+  try {
+    const response = await fetch(`${HORIZON_URL}/accounts/${accountId}`);
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as HorizonAccountResponse;
+    const signers = data.signers
+      .filter((s) => s.weight > 0)
+      .map((s) => s.key);
+    // Use the medium threshold (required for most operations)
+    const threshold = data.thresholds.med_threshold;
+    return { signers, threshold };
+  } catch {
+    return null;
+  }
 }
 
 export function generateChallenge(accountId: string): string {
@@ -56,15 +100,20 @@ export function generateChallenge(accountId: string): string {
 
 /**
  * Verifies a SEP-10 challenge transaction and issues a JWT.
+ * Supports both standard single-signer accounts and M-of-N multisig accounts.
+ *
+ * For multisig accounts, fetches signers from Horizon and passes them all to
+ * verifyChallengeTxSigners. The JWT payload includes signer_count and threshold.
+ *
  * Rejects if:
  * - Transaction is malformed or not a SEP-10 challenge
  * - Transaction has expired (stale)
  * - Domain/Network doesn't match
- * - Client signature is missing or invalid
+ * - Client signature(s) are missing or invalid
  */
-export function verifyChallengeAndIssueToken(
+export async function verifyChallengeAndIssueToken(
   transactionBase64: string,
-): string {
+): Promise<string> {
   const serverKeypair = Keypair.fromSecret(SERVER_SIGNING_KEY);
   const serverAccountId = serverKeypair.publicKey();
 
@@ -78,30 +127,43 @@ export function verifyChallengeAndIssueToken(
       DOMAIN,
     );
 
-    // verifyChallengeTxSigners ensures the clientAccountID actually signed it
+    // Try to fetch account signers from Horizon to detect multisig accounts
+    const accountInfo = await fetchAccountSigners(clientAccountID);
+    const isMultisig =
+      accountInfo !== null && accountInfo.signers.length > 1;
+
+    let signersToVerify: string[];
+    if (isMultisig) {
+      signersToVerify = accountInfo.signers;
+    } else {
+      signersToVerify = [clientAccountID];
+    }
+
+    // verifyChallengeTxSigners ensures the required signers actually signed it
     const signersFound = WebAuth.verifyChallengeTxSigners(
       transactionBase64,
       serverAccountId,
       NETWORK_PASSPHRASE,
-      [clientAccountID],
+      signersToVerify,
       DOMAIN,
       DOMAIN,
     );
 
-    const isSignedByClient = signersFound.some(signer => signer === clientAccountID);
-
-    if (!isSignedByClient) {
+    if (!signersFound || signersFound.length === 0) {
       throw new Error(
         "Challenge transaction verification failed (invalid signature).",
       );
     }
 
-    const token = jwt.sign({ accountId: clientAccountID }, getJwtSecret(), {
-      expiresIn: "24h",
-    });
+    const payload: AuthUser = { accountId: clientAccountID };
+    if (isMultisig && accountInfo) {
+      payload.signer_count = accountInfo.signers.length;
+      payload.threshold = accountInfo.threshold;
+    }
+
+    const token = jwt.sign(payload, getJwtSecret(), { expiresIn: "24h" });
     return token;
   } catch (error: any) {
-    // Catch stale transaction errors specifically if needed
     if (error.message?.includes("TimeBounds")) {
       throw new Error("Challenge has expired. Please request a new one.");
     }
