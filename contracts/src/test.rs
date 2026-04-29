@@ -2044,3 +2044,87 @@ fn test_get_claimable_batch_limit_exceeded() {
     client.get_claimable_batch(&ids, &1000);
 }
 
+
+// =============================================================================
+// #212 — get_split_children returns empty Vec for non-split streams
+// =============================================================================
+
+/// Calling get_split_children on a regular (non-split) stream returns an empty Vec.
+#[test]
+fn test_get_split_children_on_regular_stream_returns_empty() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, StellarStreamContract);
+    let client = StellarStreamContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let sender = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let token = create_token(&env, &admin);
+    let token_admin = token::StellarAssetClient::new(&env, &token);
+    token_admin.mint(&sender, &1000);
+
+    let stream_id = client.create_stream(&sender, &recipient, &token, &1000, &0, &1000, &0, &None);
+    let children = client.get_split_children(&stream_id);
+    assert_eq!(children.len(), 0);
+}
+
+/// Calling get_split_children on a stream ID that does not exist returns an empty Vec (no panic).
+#[test]
+fn test_get_split_children_on_nonexistent_stream_returns_empty() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, StellarStreamContract);
+    let client = StellarStreamContractClient::new(&env, &contract_id);
+
+    let children = client.get_split_children(&9999);
+    assert_eq!(children.len(), 0);
+}
+
+/// Calling get_split_children on a valid parent stream returns the correct child IDs,
+/// and the ChildToParent storage key maps each child back to the parent.
+#[test]
+fn test_get_split_children_on_parent_stream_returns_child_ids_and_child_to_parent_mapping() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, StellarStreamContract);
+    let client = StellarStreamContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let sender = Address::generate(&env);
+    let recipient_a = Address::generate(&env);
+    let recipient_b = Address::generate(&env);
+    let token = create_token(&env, &admin);
+    let token_admin = token::StellarAssetClient::new(&env, &token);
+    token_admin.mint(&sender, &1000);
+
+    let mut recipients = Vec::new(&env);
+    recipients.push_back((recipient_a.clone(), 300_i128));
+    recipients.push_back((recipient_b.clone(), 700_i128));
+
+    let parent_id = client.create_split_stream(&sender, &token, &1000, &0, &1000, &recipients);
+    let children = client.get_split_children(&parent_id);
+
+    assert_eq!(children.len(), 2);
+    let child_a_id = children.get(0).unwrap();
+    let child_b_id = children.get(1).unwrap();
+
+    // Verify child streams have correct allocations
+    let child_a = client.get_stream(&child_a_id);
+    let child_b = client.get_stream(&child_b_id);
+    assert_eq!(child_a.total_amount, 300);
+    assert_eq!(child_b.total_amount, 700);
+
+    // Verify ChildToParent storage maps each child back to the parent
+    let parent_of_a: u64 = env
+        .storage()
+        .persistent()
+        .get(&DataKey::ChildToParent(child_a_id))
+        .unwrap();
+    let parent_of_b: u64 = env
+        .storage()
+        .persistent()
+        .get(&DataKey::ChildToParent(child_b_id))
+        .unwrap();
+    assert_eq!(parent_of_a, parent_id);
+    assert_eq!(parent_of_b, parent_id);
+}
