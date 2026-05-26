@@ -94,6 +94,14 @@ const listStreamsQuerySchema = z.object({
   recipient: z.string().trim().optional(),
   sender: z.string().trim().optional(),
   asset: z.string().trim().optional(),
+  assetCode: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => {
+      if (!value) return undefined;
+      return value.split(",").map((code) => code.trim().toUpperCase());
+    }),
   q: z.string().trim().optional(),
   minAmount: z
     .coerce.number()
@@ -125,6 +133,44 @@ const AUTH_CHALLENGE_RATE_LIMIT = Number(process.env.AUTH_CHALLENGE_RATE_LIMIT ?
 const authChallengeLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: AUTH_CHALLENGE_RATE_LIMIT,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req: Request, res: Response) => {
+    const resetTime = (req as any).rateLimit?.resetTime;
+    const retryAfter = resetTime
+      ? Math.ceil((resetTime.getTime() - Date.now()) / 1000)
+      : 60;
+    res.set("Retry-After", String(Math.max(1, retryAfter)));
+    sendApiError(req, res, 429, "Too many requests. Please try again later.", {
+      code: "RATE_LIMIT_EXCEEDED",
+    });
+  },
+});
+
+// Rate limiters for read and mutation endpoints
+const READ_RATE_LIMIT = Number(process.env.READ_RATE_LIMIT ?? 120);
+const MUTATION_RATE_LIMIT = Number(process.env.MUTATION_RATE_LIMIT ?? 10);
+
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: READ_RATE_LIMIT,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req: Request, res: Response) => {
+    const resetTime = (req as any).rateLimit?.resetTime;
+    const retryAfter = resetTime
+      ? Math.ceil((resetTime.getTime() - Date.now()) / 1000)
+      : 60;
+    res.set("Retry-After", String(Math.max(1, retryAfter)));
+    sendApiError(req, res, 429, "Too many requests. Please try again later.", {
+      code: "RATE_LIMIT_EXCEEDED",
+    });
+  },
+});
+
+const mutationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: MUTATION_RATE_LIMIT,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req: Request, res: Response) => {
@@ -200,7 +246,7 @@ app.get("/api/assets", (_req: Request, res: Response) => {
   });
 });
 
-app.get("/api/streams", (req: Request, res: Response) => {
+app.get("/api/streams", readLimiter, (req: Request, res: Response) => {
   const parsedQuery = listStreamsQuerySchema.safeParse(req.query);
   if (!parsedQuery.success) {
     sendValidationError(req, res, parsedQuery.error.issues);
@@ -233,6 +279,11 @@ app.get("/api/streams", (req: Request, res: Response) => {
   if (query.asset) {
     data = data.filter(
       (stream) => stream.assetCode.toLowerCase() === query.asset!.toLowerCase(),
+    );
+  }
+  if (query.assetCode && query.assetCode.length > 0) {
+    data = data.filter((stream) =>
+      query.assetCode!.includes(stream.assetCode.toUpperCase()),
     );
   }
   if (query.q && query.q.length > 0) {
@@ -271,7 +322,7 @@ app.get("/api/streams", (req: Request, res: Response) => {
   });
 });
 
-app.get("/api/events", (req: Request, res: Response) => {
+app.get("/api/events", readLimiter, (req: Request, res: Response) => {
   const parsedQuery = listEventsQuerySchema.safeParse(req.query);
   if (!parsedQuery.success) {
     sendValidationError(req, res, parsedQuery.error.issues);
@@ -295,7 +346,7 @@ app.get("/api/events", (req: Request, res: Response) => {
   res.json({ data, total, page, limit });
 });
 
-app.get("/api/streams/export.csv", (req: Request, res: Response) => {
+app.get("/api/streams/export.csv", readLimiter, (req: Request, res: Response) => {
   const parsedQuery = listStreamsQuerySchema.safeParse(req.query);
   if (!parsedQuery.success) {
     sendValidationError(req, res, parsedQuery.error.issues);
@@ -314,6 +365,11 @@ app.get("/api/streams/export.csv", (req: Request, res: Response) => {
   if (query.asset) {
     data = data.filter(
       (stream) => stream.assetCode.toLowerCase() === query.asset!.toLowerCase(),
+    );
+  }
+  if (query.assetCode && query.assetCode.length > 0) {
+    data = data.filter((stream) =>
+      query.assetCode!.includes(stream.assetCode.toUpperCase()),
     );
   }
   if (query.sender) {
@@ -339,7 +395,7 @@ app.get("/api/streams/export.csv", (req: Request, res: Response) => {
   res.send(header + rows);
 });
 
-app.get("/api/streams/:id", (req: Request, res: Response) => {
+app.get("/api/streams/:id", readLimiter, (req: Request, res: Response) => {
   const parsedId = parseStreamId(req.params.id);
   if (!parsedId.ok) {
     sendValidationError(req, res, parsedId.issues);
@@ -360,7 +416,7 @@ app.get("/api/streams/:id", (req: Request, res: Response) => {
   });
 });
 
-app.get("/api/recipients/:accountId/streams", (req: Request, res: Response) => {
+app.get("/api/recipients/:accountId/streams", readLimiter, (req: Request, res: Response) => {
   const parsedParams = recipientAccountIdSchema.safeParse({
     accountId: req.params.accountId,
   });
@@ -428,7 +484,7 @@ app.get("/api/recipients/:accountId/streams", (req: Request, res: Response) => {
   });
 });
 
-app.get("/api/senders/:accountId/streams", (req: Request, res: Response) => {
+app.get("/api/senders/:accountId/streams", readLimiter, (req: Request, res: Response) => {
   const parsedParams = senderAccountIdSchema.safeParse({
     accountId: req.params.accountId,
   });
@@ -539,7 +595,7 @@ app.post("/api/auth/token", async (req: Request, res: Response) => {
 // POST /api/auth/refresh — accepts a valid Bearer JWT, returns a new one with fresh 24h expiry
 app.post("/api/auth/refresh", refreshToken);
 
-app.post("/api/streams", authMiddleware, async (req: Request, res: Response) => {
+app.post("/api/streams", mutationLimiter, authMiddleware, async (req: Request, res: Response) => {
   const parsedBody = createStreamPayloadWithAllowedAssetsSchema(ALLOWED_ASSETS).safeParse(
     req.body,
   );
@@ -569,6 +625,7 @@ app.post("/api/streams", authMiddleware, async (req: Request, res: Response) => 
 
 app.post(
   "/api/streams/:id/cancel",
+  mutationLimiter,
   authMiddleware,
   async (req: Request, res: Response) => {
     const parsedId = parseStreamId(req.params.id);
@@ -612,6 +669,7 @@ app.post(
 // POST /api/streams/:id/pause — sender pauses an active stream
 app.post(
   "/api/streams/:id/pause",
+  mutationLimiter,
   authMiddleware,
   (req: Request, res: Response) => {
     const parsedId = parseStreamId(req.params.id);
@@ -647,6 +705,7 @@ app.post(
 // POST /api/streams/:id/resume — sender resumes a paused stream
 app.post(
   "/api/streams/:id/resume",
+  mutationLimiter,
   authMiddleware,
   (req: Request, res: Response) => {
     const parsedId = parseStreamId(req.params.id);
@@ -682,6 +741,7 @@ app.post(
 // POST /api/streams/:id/claim — recipient claims vested tokens
 app.post(
   "/api/streams/:id/claim",
+  mutationLimiter,
   authMiddleware,
   async (req: Request, res: Response) => {
     const parsedId = parseStreamId(req.params.id);
@@ -794,7 +854,7 @@ app.patch(
   },
 );
 
-app.get("/api/streams/:id/history", (req: Request, res: Response) => {
+app.get("/api/streams/:id/history", readLimiter, (req: Request, res: Response) => {
   const parsedId = parseStreamId(req.params.id);
   if (!parsedId.ok) {
     sendValidationError(req, res, parsedId.issues);
@@ -820,7 +880,7 @@ app.get("/api/streams/:id/history", (req: Request, res: Response) => {
   res.json({ data, total, limit, offset });
 });
 
-app.get("/api/streams/:id/history/summary", (req: Request, res: Response) => {
+app.get("/api/streams/:id/history/summary", readLimiter, (req: Request, res: Response) => {
   const parsedId = parseStreamId(req.params.id);
   if (!parsedId.ok) {
     sendValidationError(req, res, parsedId.issues);
@@ -836,7 +896,7 @@ app.get("/api/streams/:id/history/summary", (req: Request, res: Response) => {
   res.json({ data: getStreamEventSummary(parsedId.value) });
 });
 
-app.get("/api/streams/:id/snapshot", (req: Request, res: Response) => {
+app.get("/api/streams/:id/snapshot", readLimiter, (req: Request, res: Response) => {
   const parsedId = parseStreamId(req.params.id);
   if (!parsedId.ok) {
     sendValidationError(req, res, parsedId.issues);

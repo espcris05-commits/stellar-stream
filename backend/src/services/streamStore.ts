@@ -230,9 +230,9 @@ async function retryWithBackoff<T>(
 
 function getSorobanContext():
   | {
-      contract: Contract;
-      sourceAccountPromise: Promise<Account>;
-    }
+    contract: Contract;
+    sourceAccountPromise: Promise<Account>;
+  }
   | undefined {
   const contractId = process.env.CONTRACT_ID;
   if (!contractId || !rpcServer) {
@@ -381,7 +381,7 @@ export function calculateProgress(
   at = nowInSeconds(),
 ): StreamProgress {
   const streamEnd = stream.startAt + stream.durationSeconds;
-  
+
   // Calculate paused duration including current pause if active
   let pausedDuration = stream.pausedDuration;
   if (stream.pausedAt !== undefined) {
@@ -398,9 +398,9 @@ export function calculateProgress(
     stream.pausedAt !== undefined ? Math.min(at, stream.pausedAt) : at;
 
   const elapsed = Math.max(0, Math.min(effectiveAt, effectiveEnd) - stream.startAt);
-      ? Math.min(stream.canceledAt, streamEnd + pausedDuration)
+      ?Math.min(stream.canceledAt, streamEnd + pausedDuration)
       : streamEnd + pausedDuration;
-  
+
   const elapsed = Math.max(0, Math.min(at, effectiveEnd) - stream.startAt - pausedDuration);
   const ratio = Math.min(1, elapsed / stream.durationSeconds);
   const vestedAmount = stream.totalAmount * ratio;
@@ -700,7 +700,7 @@ export async function pauseStream(id: string): Promise<StreamRecord | undefined>
   const now = nowInSeconds();
   const db = getDb();
   db.prepare("UPDATE streams SET paused_at = ? WHERE id = ?").run(now, id);
-  
+
   invalidateCache(`stream:${id}`);
   return getStream(id);
 }
@@ -761,25 +761,31 @@ export function refreshStreamStatuses(): number {
   const db = getDb();
   const now = nowInSeconds();
 
-  
+
   const toComplete = db.prepare(`
     SELECT * FROM streams 
     WHERE canceled_at IS NULL AND completed_at IS NULL
       AND (start_at + duration_seconds) <= ?
   `).all() as StreamRow[];
 
-  
+
   const result = db.prepare(`
     UPDATE streams SET completed_at = ?
     WHERE canceled_at IS NULL AND completed_at IS NULL
       AND (start_at + duration_seconds) <= ?
   `).run(now, now);
 
-  
+
   toComplete.forEach(row => {
     const record = rowToRecord(row);
-    
-    record.completedAt = now; 
+
+    record.completedAt = now;
+
+    // Record stream_completed event if not already recorded
+    if (!streamHasEvent(record.id, "completed")) {
+      recordEventWithDb(db, record.id, "completed", now);
+    }
+
     triggerWebhook("completed", record);
   });
 
@@ -1021,7 +1027,7 @@ export function resumeStream(id: string): StreamRecord {
   return stream;
 }
 
-export function updateStreamStartAt(  id: string,
+export function updateStreamStartAt(id: string,
   newStartAt: number,
 ): StreamRecord {
   const stream = getStream(id);
