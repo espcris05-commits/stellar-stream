@@ -1,7 +1,7 @@
 import axios from "axios";
 import { getDb } from "./db";
 import { getRetryDelaySeconds } from "./webhook";
-import { validateWebhookUrl } from "./webhookUrl";
+
 
 
 let isProcessing = false;
@@ -83,8 +83,8 @@ export const processWebhookQueue = async () => {
           ).run(delivery.stream_id, event, url, payload, errorMsg, updateNow);
 
           db.prepare(
-            `UPDATE webhook_deliveries SET status = 'failed', attempt = ?, last_attempt_at = ?, error_message = ? WHERE id = ?`
-          ).run(newAttempt, updateNow, errorMsg, id);
+            `DELETE FROM webhook_deliveries WHERE id = ?`
+          ).run(id);
           console.error(`[WebhookWorker] Delivery ${id} (${event}) permanently failed after max attempts. Moved to dead-letter storage.`);
         } else {
           // Use configured retry delays: 5s, 15s, 60s, 300s, 900s

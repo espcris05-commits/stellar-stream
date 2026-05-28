@@ -24,7 +24,7 @@ vi.mock("../services/api", () => ({
   listAllEvents: vi.fn(),
 }));
 
-import { listAllEvents } from "../services/api";
+import { listAllEvents, getStreamHistory } from "../services/api";
 
 // ---------------------------------------------------------------------------
 // Arbitraries
@@ -99,9 +99,10 @@ describe(
       fc.assert(
         fc.property(arbStreamEvents, (events) => {
           const result = computeFilteredEvents(events, new Set());
+          const expected = [...events].sort((a, b) => a.timestamp - b.timestamp);
           return (
-            result.length === events.length &&
-            result.every((e, i) => e === events[i])
+            result.length === expected.length &&
+            result.every((e, i) => e === expected[i])
           );
         }),
         { numRuns: 100 },
@@ -147,7 +148,9 @@ describe(
       fc.assert(
         fc.property(arbStreamEvents, arbMultiFilterSet, (events, activeFilters) => {
           const result = computeFilteredEvents(events, activeFilters);
-          const expected = events.filter((e) => activeFilters.has(e.eventType));
+          const expected = events
+            .filter((e) => activeFilters.has(e.eventType))
+            .sort((a, b) => a.timestamp - b.timestamp);
           if (result.length !== expected.length) return false;
           return result.every((e, i) => e === expected[i]);
         }),
@@ -170,9 +173,10 @@ describe(
         fc.property(arbStreamEvents, arbNonEmptyFilterSet, (events, _activeFilters) => {
           const emptyFilters = clearFilters();
           const result = computeFilteredEvents(events, emptyFilters);
+          const expected = [...events].sort((a, b) => a.timestamp - b.timestamp);
           return (
-            result.length === events.length &&
-            result.every((e, i) => e === events[i])
+            result.length === expected.length &&
+            result.every((e, i) => e === expected[i])
           );
         }),
         { numRuns: 100 },

@@ -23,8 +23,8 @@ describe("Backend Integration Tests", () => {
     // Clean database before each test
     const db = getDb();
     db.exec("DELETE FROM stream_events");
-    db.exec("DELETE FROM streams");
     db.exec("DELETE FROM webhook_deliveries");
+    db.exec("DELETE FROM streams");
   });
 
   afterAll(() => {

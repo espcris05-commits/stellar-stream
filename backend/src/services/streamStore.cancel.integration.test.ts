@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { app } from "../index";
 import { initDb, getDb } from "./db";
 import { getStreamHistory } from "./eventHistory";
+import { getJwtSecret } from "./auth";
 import path from "path";
 import fs from "fs";
 
@@ -28,16 +29,16 @@ describe("POST /api/streams/:id/cancel Integration Tests", () => {
     initDb();
 
     // Create auth tokens for tests
-    authToken = jwt.sign({ accountId: mockSender }, TEST_SECRET, { expiresIn: '1h' });
-    recipientToken = jwt.sign({ accountId: mockRecipient }, TEST_SECRET, { expiresIn: '1h' });
+    authToken = jwt.sign({ accountId: mockSender }, getJwtSecret(), { expiresIn: '1h' });
+    recipientToken = jwt.sign({ accountId: mockRecipient }, getJwtSecret(), { expiresIn: '1h' });
   });
 
   beforeEach(() => {
     // Clean database before each test
     const db = getDb();
     db.exec("DELETE FROM stream_events");
-    db.exec("DELETE FROM streams");
     db.exec("DELETE FROM webhook_deliveries");
+    db.exec("DELETE FROM streams");
   });
 
   afterAll(() => {

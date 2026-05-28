@@ -263,9 +263,15 @@ export async function verifyChallengeAndIssueToken(
     return token;
   } catch (error: any) {
     if (error.message?.includes("TimeBounds")) {
-      throw new Error("Challenge has expired. Please request a new one.");
+      const err = new Error("Challenge has expired. Please request a new one.");
+      (err as any).statusCode = 401;
+      (err as any).code = "UNAUTHORIZED";
+      throw err;
     }
-    throw new Error(`Challenge verification failed: ${error.message}`);
+    const err = new Error(`Challenge verification failed: ${error.message}`);
+    (err as any).statusCode = 401;
+    (err as any).code = "UNAUTHORIZED";
+    throw err;
   }
 }
 

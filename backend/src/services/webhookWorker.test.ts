@@ -15,6 +15,7 @@ describe("WebhookWorker", () => {
     process.env.WEBHOOK_DESTINATION_URL = "http://example.com/webhook";
     initDb();
     const db = getDb();
+    db.exec("DELETE FROM stream_events");
     db.exec("DELETE FROM webhook_deliveries");
     db.exec("DELETE FROM webhook_dead_letters");
     db.exec("DELETE FROM streams");

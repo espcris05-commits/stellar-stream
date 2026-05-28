@@ -45,7 +45,7 @@ describe('Authentication Logic & Middleware', () => {
       expect(response.status).toBe(401);
       expect(response.body).toMatchObject({
         error: "Missing or invalid authorization header.",
-        code: "UNAUTHORIZED",
+        code: "unauthorized",
       });
     });
 
@@ -55,7 +55,7 @@ describe('Authentication Logic & Middleware', () => {
         .set('Authorization', 'Basic wrongformat');
       
       expect(response.status).toBe(401);
-      expect(response.body.code).toBe('UNAUTHORIZED');
+      expect(response.body.code).toBe('unauthorized');
     });
 
     it('should reject requests with an invalid token (401)', async () => {
@@ -65,15 +65,15 @@ describe('Authentication Logic & Middleware', () => {
       
       expect(response.status).toBe(401);
       expect(response.body).toMatchObject({
-        error: "Invalid or expired authorization token.",
-        code: "UNAUTHORIZED",
+        error: "Invalid authorization token.",
+        code: "invalid_token",
       });
     });
 
     it('should reject requests with an expired token (401)', async () => {
       const expiredToken = jwt.sign(
         { accountId: testAccountId }, 
-        TEST_SECRET, 
+        getJwtSecret(), 
         { expiresIn: '-1h' }
       );
 
@@ -83,8 +83,8 @@ describe('Authentication Logic & Middleware', () => {
       
       expect(response.status).toBe(401);
       expect(response.body).toMatchObject({
-        error: "Invalid or expired authorization token.",
-        code: "UNAUTHORIZED",
+        error: "Authorization token has expired.",
+        code: "token_expired",
       });
     });
 

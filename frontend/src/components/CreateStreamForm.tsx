@@ -198,22 +198,22 @@ export function CreateStreamForm({
   const parsedApiError = apiError ? humaniseApiError(apiError) : null;
 
   const startInMinsNum = Number(values.startInMinutes);
-  const durationHoursNum = Number(values.durationHours);
+  const durationMinsNum = Number(values.durationMinutes);
   const estimatedEndLabel: string | null = (() => {
     if (
       values.startInMinutes === "" ||
-      values.durationHours === "" ||
+      values.durationMinutes === "" ||
       isNaN(startInMinsNum) ||
-      isNaN(durationHoursNum) ||
-      durationHoursNum < 1 ||
-      !Number.isInteger(durationHoursNum)
+      isNaN(durationMinsNum) ||
+      durationMinsNum < 1 ||
+      !Number.isInteger(durationMinsNum)
     ) {
       return null;
     }
     const nowSeconds = Math.floor(Date.now() / 1000);
     const startAt =
       startInMinsNum > 0 ? nowSeconds + Math.floor(startInMinsNum * 60) : nowSeconds;
-    const endAt = startAt + Math.floor(durationHoursNum * 3600);
+    const endAt = startAt + Math.floor(durationMinsNum * 60);
     const endDate = new Date(endAt * 1000);
     const datePart = new Intl.DateTimeFormat("en-US", {
       month: "short",
@@ -380,78 +380,6 @@ export function CreateStreamForm({
         </div>
       </div>
 
-      {/* Duration */}
-      <div
-        className={`field-group${errors.durationHours ? " field-group--error" : ""}`}
-      >
-        <label htmlFor="stream-duration">
-          Duration (hours)
-          <span className="field-required" aria-hidden>
-            *
-          </span>
-        </label>
-        <input
-          id="stream-duration"
-          type="number"
-          min="1"
-          step="1"
-          value={values.durationHours}
-          onChange={set("durationHours")}
-          onBlur={blur("durationHours")}
-          onKeyDown={(e) => {
-            if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault();
-          }}
-          aria-describedby={
-            errors.durationHours ? "duration-error" : "duration-hint"
-          }
-          aria-invalid={!!errors.durationHours}
-          required
-        />
-        {estimatedEndLabel && (
-          <span id="duration-hint" className="field-hint" aria-live="polite">
-            {estimatedEndLabel}
-          </span>
-        )}
-        {errors.durationHours && (
-          <span id="duration-error" className="field-error" role="alert">
-            {errors.durationHours}
-          </span>
-        )}
-      </div>
-
-      {/* Start In Minutes */}
-      <div
-        className={`field-group${errors.startInMinutes ? " field-group--error" : ""}`}
-      >
-        <label htmlFor="stream-start">
-          Start In (minutes)
-          <span className="field-required" aria-hidden>
-            *
-          </span>
-        </label>
-        <input
-          id="stream-start"
-          type="number"
-          min="0"
-          step="1"
-          value={values.startInMinutes}
-          onChange={set("startInMinutes")}
-          onBlur={blur("startInMinutes")}
-          onKeyDown={(e) => {
-            if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault();
-          }}
-          aria-describedby={
-            errors.startInMinutes ? "start-error" : "start-hint"
-          }
-          aria-invalid={!!errors.startInMinutes}
-          required
-        />
-        <span id="start-hint" className="field-hint">
-          Enter 0 to start immediately
-        </span>
-        {errors.startInMinutes && (
-          <span id="start-error" className="field-error" role="alert">
-            {errors.startInMinutes}
       {/* Duration & Start In Minutes */}
       <div className="row">
         <div
@@ -475,11 +403,16 @@ export function CreateStreamForm({
               if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault();
             }}
             aria-describedby={
-              errors.durationMinutes ? "duration-error" : undefined
+              errors.durationMinutes ? "duration-error" : (estimatedEndLabel ? "duration-hint" : undefined)
             }
             aria-invalid={!!errors.durationMinutes}
             required
           />
+          {estimatedEndLabel && (
+            <span id="duration-hint" className="field-hint" aria-live="polite">
+              {estimatedEndLabel}
+            </span>
+          )}
           {errors.durationMinutes && (
             <span id="duration-error" className="field-error" role="alert">
               {errors.durationMinutes}

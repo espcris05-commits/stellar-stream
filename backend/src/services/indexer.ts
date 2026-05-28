@@ -159,7 +159,12 @@ async function indexEvents(): Promise<void> {
     const currentLedger = latestLedger.sequence;
 
     if (lastProcessedLedger === 0) {
-
+      const cursor = db.prepare("SELECT last_ledger_sequence FROM indexer_cursor WHERE id = 1").get() as any;
+      if (cursor) {
+        lastProcessedLedger = cursor.last_ledger_sequence;
+      } else {
+        lastProcessedLedger = indexerStartLedger !== null ? indexerStartLedger : currentLedger - 1;
+        db.prepare("INSERT INTO indexer_cursor (id, last_ledger_sequence) VALUES (1, ?)").run(lastProcessedLedger);
       }
 
     if (currentLedger <= lastProcessedLedger) {
@@ -189,7 +194,7 @@ async function indexEvents(): Promise<void> {
       }
 
       lastProcessedLedger = currentLedger;
-
+      db.prepare("UPDATE indexer_cursor SET last_ledger_sequence = ? WHERE id = 1").run(currentLedger);
     })();
 
     ledgersScannedTotal.inc(currentLedger - startLedger);

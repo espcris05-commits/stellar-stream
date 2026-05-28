@@ -1,5 +1,4 @@
 
-import { memo, useCallback, useMemo, useRef, useState, RefObject } from "react";
 import { Stream } from "../types/stream";
 import { getExportCsvUrl, ListStreamsFilters, cancelStream } from "../services/api";
 import { CopyableAddress } from "./CopyableAddress";
@@ -21,6 +20,7 @@ interface StreamsTableProps {
    * Receives the stream AND the button ref so the modal can return focus.
    */
   onEditStartTime: (stream: Stream, triggerRef: RefObject<HTMLButtonElement | null>) => void;
+  onRefresh?: () => void;
 }
 
 // ── Skeleton rows (#397) ──────────────────────────────────────────────────
@@ -55,34 +55,95 @@ function formatTimestamp(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleString();
 }
 
-
-
+type SortColumn = "status" | "amount" | "vested" | "startDate" | null;
+type SortDirection = "asc" | "desc" | null;
 
 export function StreamsTable({
   streams,
-  loading = false,
   filters,
   onFiltersChange,
   onCancel,
   onPause,
   onResume,
-  onEditStartTime,
   onOpenStream,
+  onEditStartTime,
+  onRefresh,
 }: StreamsTableProps) {
-  const [selectedStreamIds, setSelectedStreamIds] = useState<Set<string>>(new Set());
   const [expandedStreamId, setExpandedStreamId] = useState<string | null>(null);
-  const [isBulkCanceling, setIsBulkCanceling] = useState(false);
-  const [bulkCancelProgress, setBulkCancelProgress] = useState({ current: 0, total: 0 });
+  const [sortColumn, setSortColumn] = useState<SortColumn>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [selectedStreamIds, setSelectedStreamIds] = useState<Set<string>>(new Set());
+  const [isBulkCanceling, setIsBulkCanceling] = useState<boolean>(false);
+  const [bulkCancelProgress, setBulkCancelProgress] = useState<{ current: number; total: number }>({
+    current: 0,
+    total: 0,
+  });
 
-  const exportUrl = useMemo(() => getExportCsvUrl(filters), [filters]);
+  const exportUrl = useMemo(() => getExportCsvUrl(filters as Record<string, string>), [filters]);
 
-  // Sorted streams (stable sort by id to avoid unnecessary re-renders)
-  const sortedStreams = useMemo(() => [...streams].sort((a, b) => a.id.localeCompare(b.id)), [streams]);
+  const toggleTimeline = (streamId: string) => {
+    setExpandedStreamId((prev) => (prev === streamId ? null : streamId));
+  };
+
+
+  // Sort streams based on current sort state
+  const sortedStreams = useMemo(() => {
+    if (!sortColumn || !sortDirection) {
+      return streams;
+    }
+
+    const sorted = [...streams];
+
+    sorted.sort((a, b) => {
+      let valueA: number | string | Date;
+      let valueB: number | string | Date;
+
+      switch (sortColumn) {
+        case "status": {
+          const statusOrder: Record<string, number> = {
+            active: 0,
+            scheduled: 1,
+            completed: 2,
+            canceled: 3,
+            paused: 4,
+          };
+          valueA = statusOrder[a.progress.status] ?? 999;
+          valueB = statusOrder[b.progress.status] ?? 999;
+          break;
+        }
+        case "amount": {
+          valueA = a.totalAmount;
+          valueB = b.totalAmount;
+          break;
+        }
+        case "vested": {
+          valueA = a.progress.vestedAmount;
+          valueB = b.progress.vestedAmount;
+          break;
+        }
+        case "startDate": {
+          valueA = a.startAt;
+          valueB = b.startAt;
+          break;
+        }
+        default:
+          return 0;
+      }
+
+      if (valueA < valueB) {
+        return sortDirection === "asc" ? -1 : 1;
+      }
+      if (valueA > valueB) {
+        return sortDirection === "asc" ? 1 : -1;
+      }
+      return 0;
+    });
+
+    return sorted;
+  }, [streams, sortColumn, sortDirection]);
 
   // Helper: determine if a stream is eligible for selection (active or scheduled)
-  const isStreamSelectable = useCallback((stream: Stream): boolean => {
-    return stream.progress.status === "active" || stream.progress.status === "scheduled";
-  }, []);
+
 
   // Get all selectable streams on current page
   const selectableStreams = useMemo(() => streams.filter(isStreamSelectable), [streams, isStreamSelectable]);
@@ -157,37 +218,20 @@ export function StreamsTable({
     console.log(`Bulk cancellation complete: ${successCount} succeeded, ${failureCount} failed`);
   }, [selectedStreamIds]);
 
-
+  // Clear selections when streams change (e.g., after filter change)
+  useEffect(() => {
+    setSelectedStreamIds((prev) => {
+      const validIds = new Set(streams.map((s) => s.id));
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (validIds.has(id)) next.add(id);
+      });
+      return next;
+    });
+  }, [streams]);
 
   return (
-    <>
-      <div className="card">
-        <FilterBar filters={filters} onChange={onFiltersChange} />
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "1rem",
-          }}
-        >
-          <h2 style={{ margin: 0 }}>Live Streams</h2>
-          <a href={exportUrl} className="btn-ghost" download>
-            Export CSV
-          </a>
-        </div>
 
-        <div style={{ overflowX: "auto" }}>
-          <table aria-busy={loading} aria-label="Streams">
-            <thead>
-              <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    aria-label="Select all streams"
-                    checked={allSelectableSelected}
-                    onChange={handleSelectAllToggle}
-                    disabled={loading}
                   />
                 </th>
                 <th>ID</th>
@@ -232,9 +276,8 @@ export function StreamsTable({
             </tbody>
           </table>
         </div>
-      </div>
 
-      {/* Floating Action Bar */}
+
       {selectedStreamIds.size > 0 && (
         <BulkActionBar
           selectedCount={selectedStreamIds.size}
@@ -243,24 +286,10 @@ export function StreamsTable({
           progress={bulkCancelProgress}
         />
       )}
-    </>
+    </div>
   );
 }
 
-/**
- * BulkActionBar Component
- * 
- * Floating action bar that appears at the bottom of the viewport when streams are selected.
- * Provides visual feedback during bulk cancellation operations.
- * 
- * Features:
- * - Fixed positioning with high z-index (1000) to stay above other content
- * - Slide-up animation on mount
- * - Shows selected count and cancel button
- * - Displays progress during cancellation (e.g., "Canceling 3/10...")
- * - Button is disabled during operation to prevent duplicate submissions
- * - Responsive design: centered on desktop, full-width on mobile
- */
 interface BulkActionBarProps {
   selectedCount: number;
   onCancel: () => void;
@@ -294,10 +323,6 @@ function BulkActionBar({
   );
 }
 
-// ── StreamRow ─────────────────────────────────────────────────────────────
-// Extracted so each row can hold its own triggerRef without polluting the
-// parent component's hook rules.
-
 interface StreamRowProps {
   stream: Stream;
   isScheduled: boolean;
@@ -305,6 +330,9 @@ interface StreamRowProps {
   isExpanded: boolean;
   isSelected: boolean;
   healthBadges: ReturnType<typeof getHealthBadges>;
+  isSelected: boolean;
+  isSelectable: boolean;
+  onToggleSelect: () => void;
   onToggleTimeline: (id: string) => void;
   onCheckboxToggle: (id: string) => void;
   onCancel: (id: string) => Promise<void>;
@@ -321,6 +349,9 @@ const StreamRow = memo(function StreamRow({
   isExpanded,
   isSelected,
   healthBadges,
+  isSelected,
+  isSelectable,
+  onToggleSelect,
   onToggleTimeline,
   onCheckboxToggle,
   onCancel,
@@ -329,17 +360,58 @@ const StreamRow = memo(function StreamRow({
   onEditStartTime,
   onOpenStream,
 }: StreamRowProps) {
-  /**
-   * Stable ref to the "✏️ Edit" button in this row.
-   * Passed to the modal so focus returns here when the modal closes.
-   */
   const editBtnRef = useRef<HTMLButtonElement>(null);
   const isPaused = stream.progress.status === "paused";
   const isActive = stream.progress.status === "active";
 
   return (
     <>
-      <tr>
+      <tr
+        tabIndex={0}
+        className="stream-table-row-focusable"
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            const target = e.target as HTMLElement;
+            if (
+              target.tagName === "BUTTON" ||
+              target.closest("button") ||
+              target.tagName === "A" ||
+              target.closest("a") ||
+              target.tagName === "INPUT" ||
+              target.closest("input")
+            ) {
+              return;
+            }
+            e.preventDefault();
+            onOpenStream?.(stream.id);
+          }
+        }}
+        onClick={(e) => {
+          const target = e.target as HTMLElement;
+          if (
+            target.tagName === "BUTTON" ||
+            target.closest("button") ||
+            target.tagName === "A" ||
+            target.closest("a") ||
+            target.tagName === "INPUT" ||
+            target.closest("input")
+          ) {
+            return;
+          }
+          onOpenStream?.(stream.id);
+        }}
+      >
+        <td style={{ width: "40px", textAlign: "center" }}>
+          {isSelectable && (
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={onToggleSelect}
+              aria-label={`Select stream ${stream.id}`}
+              style={{ cursor: "pointer" }}
+            />
+          )}
+        </td>
         <td>
           <input
             type="checkbox"

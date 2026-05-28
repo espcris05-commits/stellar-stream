@@ -810,7 +810,7 @@ app.post(
   "/api/streams/:id/pause",
   mutationLimiter,
   authMiddleware,
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     const parsedId = parseStreamId(req.params.id);
     if (!parsedId.ok) {
       sendValidationError(req, res, parsedId.issues);
@@ -832,7 +832,7 @@ app.post(
     }
 
     try {
-      const updated = pauseStream(parsedId.value);
+      const updated = await pauseStream(parsedId.value);
       res.json({ data: { ...updated, progress: calculateProgress(updated) } });
     } catch (error: any) {
       const normalizedError = normalizeUnknownApiError(
@@ -857,7 +857,7 @@ app.post(
   "/api/streams/:id/resume",
   mutationLimiter,
   authMiddleware,
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     const parsedId = parseStreamId(req.params.id);
     if (!parsedId.ok) {
       sendValidationError(req, res, parsedId.issues);
@@ -879,7 +879,7 @@ app.post(
     }
 
     try {
-      const updated = resumeStream(parsedId.value);
+      const updated = await resumeStream(parsedId.value);
       res.json({ data: { ...updated, progress: calculateProgress(updated) } });
     } catch (error: any) {
       const normalizedError = normalizeUnknownApiError(

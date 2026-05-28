@@ -1,21 +1,30 @@
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CopyableAddress } from "./CopyableAddress";
 
 describe("CopyableAddress Component", () => {
   const mockWriteText = vi.fn();
-  const originalClipboard = global.navigator.clipboard;
+  let originalClipboard: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    global.navigator.clipboard = {
-      writeText: mockWriteText,
-    } as unknown as Clipboard;
+    originalClipboard = global.navigator.clipboard;
+    Object.defineProperty(global.navigator, "clipboard", {
+      value: {
+        writeText: mockWriteText,
+      },
+      configurable: true,
+      writable: true,
+    });
   });
 
   afterEach(() => {
-    global.navigator.clipboard = originalClipboard;
+    Object.defineProperty(global.navigator, "clipboard", {
+      value: originalClipboard,
+      configurable: true,
+      writable: true,
+    });
   });
 
   it("truncates a 56-character G-address correctly in middle mode", () => {
@@ -41,7 +50,9 @@ describe("CopyableAddress Component", () => {
     const copyButton = screen.getByTitle("Copy address");
     fireEvent.click(copyButton);
 
-    expect(mockWriteText).toHaveBeenCalledWith(longAddress);
+    await waitFor(() => {
+      expect(mockWriteText).toHaveBeenCalledWith(longAddress);
+    });
   });
 
   it("shows copied feedback (✓) after clicking the copy button", async () => {
@@ -53,7 +64,9 @@ describe("CopyableAddress Component", () => {
 
     fireEvent.click(copyButton);
 
-    expect(copyButton.textContent).toBe("✓");
+    await waitFor(() => {
+      expect(copyButton.textContent).toBe("✓");
+    });
   });
 
   it("displays full address without truncation when address is short", () => {
@@ -65,11 +78,11 @@ describe("CopyableAddress Component", () => {
   });
 
   it("displays full address without truncation when address is exactly 12 characters", () => {
-    const exactLengthAddress = "GABCDEFGHIJ";
+    const exactLengthAddress = "GABCDEFGHIJK";
     render(<CopyableAddress address={exactLengthAddress} />);
 
     const addressSpan = screen.getByTitle(exactLengthAddress);
-    expect(addressSpan.textContent).toBe("GABCDEFGHIJ");
+    expect(addressSpan.textContent).toBe("GABCDEFGHIJK");
   });
 
   it("handles clipboard errors gracefully", async () => {
@@ -82,7 +95,9 @@ describe("CopyableAddress Component", () => {
     const copyButton = screen.getByTitle("Copy address");
     fireEvent.click(copyButton);
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith("Failed to copy text", expect.any(Error));
+    await waitFor(() => {
+      expect(consoleErrorSpy).toHaveBeenCalledWith("Failed to copy text", expect.any(Error));
+    });
     consoleErrorSpy.mockRestore();
   });
 });

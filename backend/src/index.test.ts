@@ -7,6 +7,7 @@ const streamStoreMocks = vi.hoisted(() => ({
   getStream: vi.fn(),
   initSoroban: vi.fn(),
   listStreams: vi.fn(),
+  listStreamsBySender: vi.fn(),
   syncStreams: vi.fn(),
   updateStreamStartAt: vi.fn(),
 }));
@@ -53,11 +54,11 @@ type TestProgress = {
   percentComplete: number;
 };
 
-const SENDER_A = "GA6W6AAAAAAAAAAW6AAAAAAAAAAW6AAAAAAAAAAW6AAAAAAAAAAW6AAA";
-const SENDER_B = "GA6W6BBBBBBBBBBW6BBBBBBBBBBW6BBBBBBBBBBW6BBBBBBBBBBW6BBB";
-const SENDER_C = "GA6W6CCCCCCCCCCW6CCCCCCCCCCW6CCCCCCCCCCW6CCCCCCCCCCW6CCC";
-const RECIPIENT_1 = "GA6W61111111111W61111111111W61111111111W61111111111W6111";
-const RECIPIENT_2 = "GA6W62222222222W62222222222W62222222222W62222222222W6222";
+const SENDER_A = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const SENDER_B = "GBLHBYX72TJQH5EVPUN4ATAREH6TWYXQAH37MHNCVQG2NKLHFDSMFS3D";
+const SENDER_C = "GANNU4KAOYHV6FSY7Z44QWUEUCRBH56Y5BOP6NP6OKU3AUL3B54V34HU";
+const RECIPIENT_1 = "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+const RECIPIENT_2 = "GBRPYHIL2CI3WHZDTOOQFC6EB4CGQOFSNQB3BHPOMONNHJGKYJPJJYFF";
 
 const streams: TestStream[] = [
   {
@@ -211,6 +212,9 @@ beforeEach(() => {
   streamStoreMocks.calculateProgress.mockReset();
   streamStoreMocks.listStreams.mockReturnValue(streams);
   streamStoreMocks.calculateProgress.mockImplementation((stream: TestStream) => progressById[stream.id]);
+
+  streamStoreMocks.listStreamsBySender.mockReset();
+  streamStoreMocks.listStreamsBySender.mockImplementation((sender: string) => streams.filter(s => s.sender === sender));
 
   eventHistoryMocks.getGlobalEvents.mockReset();
   eventHistoryMocks.countAllEvents.mockReset();
@@ -370,7 +374,7 @@ describe("GET /api/senders/:accountId/streams", () => {
   });
 
   it("filters by search term", () => {
-    const { status, body } = invokeSenderStreamsRoute(SENDER_A, { q: "GA6W6AAAAAAAAAAW6AAAAAAAAAAW6AAAAAAAAAAW6AAAAAAAAAAW6AAA" });
+    const { status, body } = invokeSenderStreamsRoute(SENDER_A, { q: SENDER_A });
 
     expect(status).toBe(200);
     expect(body.total).toBe(2);
@@ -380,7 +384,7 @@ describe("GET /api/senders/:accountId/streams", () => {
     const { status, body } = invokeSenderStreamsRoute("invalid_account");
 
     expect(status).toBe(400);
-    expect(body.error).toContain("Must be a valid Stellar account ID");
+    expect(body.error.toLowerCase()).toContain("must be a valid stellar account id");
     expect(body.statusCode).toBe(400);
     expect(body.requestId).toBe("test-request-id");
     expect(body.code).toBe("VALIDATION_ERROR");
@@ -473,6 +477,7 @@ describe("GET /api/events", () => {
       expect.any(Number),
       expect.any(Number),
       "created",
+      undefined,
     );
   });
 
@@ -488,7 +493,7 @@ describe("GET /api/events", () => {
     expect(body.total).toBe(4);
     expect(body.data).toHaveLength(2);
     // offset should be (2-1)*2 = 2
-    expect(eventHistoryMocks.getGlobalEvents).toHaveBeenCalledWith(2, 2, undefined);
+    expect(eventHistoryMocks.getGlobalEvents).toHaveBeenCalledWith(2, 2, undefined, undefined);
   });
 
   it("uses default limit of 20 when only page is provided", () => {
@@ -509,7 +514,7 @@ describe("GET /api/events", () => {
     expect(status).toBe(200);
     expect(body.page).toBe(1);
     expect(body.limit).toBe(2);
-    expect(eventHistoryMocks.getGlobalEvents).toHaveBeenCalledWith(2, 0, undefined);
+    expect(eventHistoryMocks.getGlobalEvents).toHaveBeenCalledWith(2, 0, undefined, undefined);
   });
 
   it("returns 400 for an invalid eventType", () => {

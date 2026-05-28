@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { renderHook, waitFor, act } from "@testing-library/react";
 import { useClaimStream } from "./useClaimStream";
 import { claimStream, SorobanClaimError, ClaimResult } from "../services/soroban";
 import type { StreamEvent } from "../services/api";
@@ -22,11 +22,6 @@ const mockClaimStream = vi.mocked(claimStream);
 describe("useClaimStream", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   // Helper to create mock claim result
@@ -68,20 +63,22 @@ describe("useClaimStream", () => {
     expect(result.current.claimState.status).toBe("idle");
     expect(result.current.isPending).toBe(false);
 
-    // Start claim
-    result.current.claim({
-      streamId: "123",
-      recipientAddress: "GTEST123456789",
-      amount: 100,
+    // Start claim - wrapped in act since it triggers state updates
+    act(() => {
+      result.current.claim({
+        streamId: "123",
+        recipientAddress: "GTEST123456789",
+        amount: 100,
+      });
     });
 
-    // Loading state should be true immediately
+    // Loading state should be true immediately (synchronous update)
     expect(result.current.claimState.status).toBe("pending");
     expect(result.current.isPending).toBe(true);
     expect(result.current.claimState.streamId).toBe("123");
     expect(result.current.claimState.error).toBe(null);
 
-    // Wait for completion
+    // Wait for completion (async resolution)
     await waitFor(() => {
       expect(result.current.claimState.status).toBe("confirmed");
       expect(result.current.isPending).toBe(false);
@@ -113,10 +110,12 @@ describe("useClaimStream", () => {
     expect(result.current.claimState.status).toBe("idle");
 
     // Start claim - State 2: true (pending)
-    result.current.claim({
-      streamId: "123",
-      recipientAddress: "GTEST123456789",
-      amount: 100,
+    act(() => {
+      result.current.claim({
+        streamId: "123",
+        recipientAddress: "GTEST123456789",
+        amount: 100,
+      });
     });
 
     expect(result.current.isPending).toBe(true);
@@ -140,10 +139,12 @@ describe("useClaimStream", () => {
       useClaimStream(onSuccess, onFailure)
     );
 
-    result.current.claim({
-      streamId: "123",
-      recipientAddress: "GTEST123456789",
-      amount: 100,
+    act(() => {
+      result.current.claim({
+        streamId: "123",
+        recipientAddress: "GTEST123456789",
+        amount: 100,
+      });
     });
 
     // Wait for error
@@ -170,10 +171,12 @@ describe("useClaimStream", () => {
       useClaimStream(onSuccess, onFailure)
     );
 
-    result.current.claim({
-      streamId: "123",
-      recipientAddress: "GTEST123456789",
-      amount: 100,
+    act(() => {
+      result.current.claim({
+        streamId: "123",
+        recipientAddress: "GTEST123456789",
+        amount: 100,
+      });
     });
 
     await waitFor(() => {
@@ -194,10 +197,12 @@ describe("useClaimStream", () => {
       useClaimStream(onSuccess, onFailure)
     );
 
-    result.current.claim({
-      streamId: "123",
-      recipientAddress: "GTEST123456789",
-      amount: 100,
+    act(() => {
+      result.current.claim({
+        streamId: "123",
+        recipientAddress: "GTEST123456789",
+        amount: 100,
+      });
     });
 
     await waitFor(() => {
@@ -217,10 +222,12 @@ describe("useClaimStream", () => {
     );
 
     // Try to claim with amount 0
-    result.current.claim({
-      streamId: "123",
-      recipientAddress: "GTEST123456789",
-      amount: 0,
+    act(() => {
+      result.current.claim({
+        streamId: "123",
+        recipientAddress: "GTEST123456789",
+        amount: 0,
+      });
     });
 
     // Should not call API and remain in idle state
@@ -235,11 +242,11 @@ describe("useClaimStream", () => {
     const mockResult = createMockClaimResult();
     const mockHistory = createMockHistory();
     
-    mockClaimStream.mockImplementation(() => 
-      new Promise(resolve => 
-        setTimeout(() => resolve({ result: mockResult, history: mockHistory }), 100)
-      )
-    );
+    let resolveClaimPromise: any;
+    const claimPromise = new Promise((resolve) => {
+      resolveClaimPromise = resolve;
+    });
+    mockClaimStream.mockReturnValue(claimPromise as any);
 
     const onSuccess = vi.fn();
     const onFailure = vi.fn();
@@ -249,27 +256,33 @@ describe("useClaimStream", () => {
     );
 
     // Start first claim
-    result.current.claim({
-      streamId: "123",
-      recipientAddress: "GTEST123456789",
-      amount: 100,
+    act(() => {
+      result.current.claim({
+        streamId: "123",
+        recipientAddress: "GTEST123456789",
+        amount: 100,
+      });
     });
 
     expect(result.current.isPending).toBe(true);
 
     // Try second claim while first is pending
-    result.current.claim({
-      streamId: "456",
-      recipientAddress: "GTEST123456789",
-      amount: 200,
+    act(() => {
+      result.current.claim({
+        streamId: "456",
+        recipientAddress: "GTEST123456789",
+        amount: 200,
+      });
     });
 
     // Should only have one API call
     expect(mockClaimStream).toHaveBeenCalledTimes(1);
     expect(mockClaimStream).toHaveBeenCalledWith("123", "GTEST123456789", 100);
 
-    // Complete first claim
-    vi.advanceTimersByTime(100);
+    // Resolve first claim
+    act(() => {
+      resolveClaimPromise({ result: mockResult, history: mockHistory });
+    });
 
     await waitFor(() => {
       expect(result.current.claimState.status).toBe("confirmed");
@@ -279,38 +292,50 @@ describe("useClaimStream", () => {
   });
 
   it("resets to idle after successful claim delay", async () => {
-    const mockResult = createMockClaimResult();
-    const mockHistory = createMockHistory();
-    
-    mockClaimStream.mockResolvedValue({
-      result: mockResult,
-      history: mockHistory,
-    });
+    vi.useFakeTimers();
+    try {
+      const mockResult = createMockClaimResult();
+      const mockHistory = createMockHistory();
+      
+      mockClaimStream.mockResolvedValue({
+        result: mockResult,
+        history: mockHistory,
+      });
 
-    const onSuccess = vi.fn();
-    const onFailure = vi.fn();
+      const onSuccess = vi.fn();
+      const onFailure = vi.fn();
 
-    const { result } = renderHook(() => 
-      useClaimStream(onSuccess, onFailure)
-    );
+      const { result } = renderHook(() => 
+        useClaimStream(onSuccess, onFailure)
+      );
 
-    result.current.claim({
-      streamId: "123",
-      recipientAddress: "GTEST123456789",
-      amount: 100,
-    });
+      act(() => {
+        result.current.claim({
+          streamId: "123",
+          recipientAddress: "GTEST123456789",
+          amount: 100,
+        });
+      });
 
-    await waitFor(() => {
+      // Wait for confirmed state. Flush microtasks only.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
       expect(result.current.claimState.status).toBe("confirmed");
-    });
 
-    // Advance time by 2 seconds for reset
-    vi.advanceTimersByTime(2000);
+      // Advance time by 2 seconds for reset
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
 
-    await waitFor(() => {
       expect(result.current.claimState.status).toBe("idle");
       expect(result.current.claimState.streamId).toBe(null);
-    });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("returns correct claimed amount from API response", async () => {
@@ -329,10 +354,12 @@ describe("useClaimStream", () => {
       useClaimStream(onSuccess, onFailure)
     );
 
-    result.current.claim({
-      streamId: "123",
-      recipientAddress: "GTEST123456789",
-      amount: 100,
+    act(() => {
+      result.current.claim({
+        streamId: "123",
+        recipientAddress: "GTEST123456789",
+        amount: 100,
+      });
     });
 
     await waitFor(() => {
@@ -359,10 +386,12 @@ describe("useClaimStream", () => {
       useClaimStream(onSuccess, onFailure)
     );
 
-    result.current.claim({
-      streamId: "123",
-      recipientAddress: "GTEST123456789",
-      amount: 100,
+    act(() => {
+      result.current.claim({
+        streamId: "123",
+        recipientAddress: "GTEST123456789",
+        amount: 100,
+      });
     });
 
     await waitFor(() => {
@@ -379,10 +408,12 @@ describe("useClaimStream", () => {
     });
 
     // Retry claim
-    result.current.claim({
-      streamId: "123",
-      recipientAddress: "GTEST123456789",
-      amount: 100,
+    act(() => {
+      result.current.claim({
+        streamId: "123",
+        recipientAddress: "GTEST123456789",
+        amount: 100,
+      });
     });
 
     await waitFor(() => {

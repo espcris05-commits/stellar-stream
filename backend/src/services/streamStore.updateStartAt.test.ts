@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies
 const mockState = vi.hoisted(() => ({
@@ -65,13 +65,17 @@ describe("updateStreamStartAt", () => {
   const mockSender = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
   const mockRecipient = "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
     mockState.streams.clear();
     mockState.events = [];
     
-    // Mock nowInSeconds to return consistent time
-    vi.spyOn(await import("./streamStore"), "nowInSeconds").mockReturnValue(mockNow); // Line 74
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(mockNow * 1000));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe("Successful updates", () => {
