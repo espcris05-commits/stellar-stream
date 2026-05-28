@@ -41,7 +41,17 @@ jobs:
       - name: Check contract formatting
         run: cargo fmt --all -- --check
 
+      - name: Run Clippy lint checks
+        run: cargo clippy -- -D warnings
+
       - name: Run contract tests
         env:
           RUSTFLAGS: "-D warnings"
         run: cargo test --locked
+
+      - name: Build WASM binary
+        run: cargo build --locked --release --target wasm32-unknown-unknown
+
+      - name: Report WASM binary size
+        run: |
+          find target/wasm32-unknown-unknown/release -name '*.wasm' -exec sh -c 'echo "$(numfmt --to=iec $(stat --format=%s "$1"))  $1"' _ {} \;
