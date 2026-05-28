@@ -1,16 +1,5 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import fs from "fs";
-import path from "path";
-import {
-    getDeadLetters,
-    getRetryDelaySeconds,
-    triggerWebhook,
-    validateWebhookUrl,
-} from "./webhook";
-import { getDb, initDb } from "./db";
-
-const TEST_DB_PATH = path.join(__dirname, "..", "..", "data", "test-webhooks.db");
 
 describe("Webhook Retry Logic", () => {
     it("should return correct retry delays", () => {
@@ -72,8 +61,10 @@ describe("Webhook triggerWebhook and getDeadLetters", () => {
         process.env.DB_PATH = TEST_DB_PATH;
         initDb();
         const db = getDb();
+        db.exec("DELETE FROM stream_events");
         db.exec("DELETE FROM webhook_deliveries");
         db.exec("DELETE FROM webhook_dead_letters");
+        db.exec("DELETE FROM streams");
 
         originalEnvUrl = process.env.WEBHOOK_DESTINATION_URL;
         process.env.WEBHOOK_DESTINATION_URL = "https://example.com/webhook";
@@ -150,13 +141,13 @@ describe("Webhook triggerWebhook and getDeadLetters", () => {
         
         // Insert dummy dead letters out of order
         const stmt = db.prepare(`
-            INSERT INTO webhook_dead_letters (url, payload, last_error, failed_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO webhook_dead_letters (stream_id, event, url, payload, last_error, failed_at)
+            VALUES (?, ?, ?, ?, ?, ?)
         `);
         
-        stmt.run("http://u1", "p1", "err", 1000);
-        stmt.run("http://u2", "p2", "err", 3000);
-        stmt.run("http://u3", "p3", "err", 2000);
+        stmt.run("s1", "event.created", "http://u1", "p1", "err", 1000);
+        stmt.run("s1", "event.created", "http://u2", "p2", "err", 3000);
+        stmt.run("s1", "event.created", "http://u3", "p3", "err", 2000);
         
         const deadLetters = getDeadLetters();
         

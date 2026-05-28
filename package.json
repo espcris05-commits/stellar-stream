@@ -10,11 +10,15 @@
     "build": "cd backend && npm run build && cd ../frontend && npm run build",
     "deploy:contract": "./scripts/deploy.sh",
     "gen:bindings": "./scripts/generate-contract-bindings.sh",
-    "changelog:update": "conventional-changelog -p angular -i CHANGELOG.md -s"
+    "changelog:update": "conventional-changelog -p angular -i CHANGELOG.md -s",
+    "prepare": "husky"
   },
   "license": "MIT",
+  "lint-staged": {
+    "**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
-    "conventional-changelog-cli": "^2.2.2"
-  }
-}
 

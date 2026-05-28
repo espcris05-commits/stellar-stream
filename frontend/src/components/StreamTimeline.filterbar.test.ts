@@ -20,6 +20,8 @@ const EVENT_TYPES: EventType[] = [
   "claimed",
   "canceled",
   "start_time_updated",
+  "paused",
+  "resumed",
 ];
 
 const arbFilterSet = fc
@@ -36,16 +38,18 @@ const arbNonEmptyFilterSet = fc
 // ---------------------------------------------------------------------------
 
 describe("FilterBar: button configuration", () => {
-  it("renders exactly four toggle buttons", () => {
-    expect(FILTER_BUTTONS).toHaveLength(4);
+  it("renders exactly six toggle buttons", () => {
+    expect(FILTER_BUTTONS).toHaveLength(6);
   });
 
-  it("has correct labels for all four event types", () => {
+  it("has correct labels for all six event types", () => {
     const labels = FILTER_BUTTONS.map((b) => b.label);
     expect(labels).toContain("Created");
     expect(labels).toContain("Claimed");
     expect(labels).toContain("Canceled");
     expect(labels).toContain("Start Time Updated");
+    expect(labels).toContain("Paused");
+    expect(labels).toContain("Resumed");
   });
 
   it("maps each button to the correct EventType", () => {
@@ -54,14 +58,18 @@ describe("FilterBar: button configuration", () => {
     expect(typeMap["claimed"]).toBe("Claimed");
     expect(typeMap["canceled"]).toBe("Canceled");
     expect(typeMap["start_time_updated"]).toBe("Start Time Updated");
+    expect(typeMap["paused"]).toBe("Paused");
+    expect(typeMap["resumed"]).toBe("Resumed");
   });
 
-  it("covers all four known EventTypes", () => {
+  it("covers all six known EventTypes", () => {
     const types = FILTER_BUTTONS.map((b) => b.type);
     expect(types).toContain("created");
     expect(types).toContain("claimed");
     expect(types).toContain("canceled");
     expect(types).toContain("start_time_updated");
+    expect(types).toContain("paused");
+    expect(types).toContain("resumed");
   });
 });
 

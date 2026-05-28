@@ -5,12 +5,15 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../server';
 import { StreamDetailDrawer } from './StreamDetailDrawer';
 
+import { clearCache } from '../services/api';
+
 const onClose = vi.fn();
 const onCancel = vi.fn().mockResolvedValue(undefined);
 
 beforeEach(() => {
   onClose.mockClear();
   onCancel.mockClear();
+  clearCache();
 });
 
 describe('StreamDetailDrawer', () => {

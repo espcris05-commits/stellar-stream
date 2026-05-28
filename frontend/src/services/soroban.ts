@@ -78,3 +78,5 @@ export async function claimOnChain(
   return response.json() as Promise<ClaimResponse>;
 }
 
+export const claimStream = claimOnChain;
+

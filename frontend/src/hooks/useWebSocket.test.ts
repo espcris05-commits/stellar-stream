@@ -41,23 +41,32 @@ describe("useWebSocket", () => {
   });
 
   it("reconnects with 1s, 2s, 4s backoff", async () => {
-    renderHook(() => useWebSocket<{ type: string }>("ws://localhost/test"));
+    await act(async () => {
+      renderHook(() => useWebSocket<{ type: string }>("ws://localhost/test"));
+      await Promise.resolve();
+    });
     expect(MockWebSocket.instances).toHaveLength(1);
 
-    act(() => {
+    await act(async () => {
       MockWebSocket.instances[0].close();
+    });
+    await act(async () => {
       vi.advanceTimersByTime(1000);
     });
     expect(MockWebSocket.instances).toHaveLength(2);
 
-    act(() => {
+    await act(async () => {
       MockWebSocket.instances[1].close();
+    });
+    await act(async () => {
       vi.advanceTimersByTime(2000);
     });
     expect(MockWebSocket.instances).toHaveLength(3);
 
-    act(() => {
+    await act(async () => {
       MockWebSocket.instances[2].close();
+    });
+    await act(async () => {
       vi.advanceTimersByTime(4000);
     });
     expect(MockWebSocket.instances).toHaveLength(4);
@@ -65,14 +74,19 @@ describe("useWebSocket", () => {
 
   it("calls onMessage handler for valid messages", async () => {
     const onMessage = vi.fn();
-    const { result } = renderHook(() =>
-      useWebSocket<{ type: string; id: string }>("ws://localhost/test", {
-        onMessage,
-      }),
-    );
+    let result: any;
+    await act(async () => {
+      const hook = renderHook(() =>
+        useWebSocket<{ type: string; id: string }>("ws://localhost/test", {
+          onMessage,
+        }),
+      );
+      result = hook.result;
+      await Promise.resolve();
+    });
 
     const payload = { type: "stream_update", id: "123" };
-    act(() => {
+    await act(async () => {
       MockWebSocket.instances[0].emitMessage(payload);
     });
 
@@ -82,11 +96,16 @@ describe("useWebSocket", () => {
 
   it("silently ignores malformed or unknown message types", async () => {
     const onMessage = vi.fn();
-    const { result } = renderHook(() =>
-      useWebSocket<{ type: string }>("ws://localhost/test", { onMessage }),
-    );
+    let result: any;
+    await act(async () => {
+      const hook = renderHook(() =>
+        useWebSocket<{ type: string }>("ws://localhost/test", { onMessage }),
+      );
+      result = hook.result;
+      await Promise.resolve();
+    });
 
-    act(() => {
+    await act(async () => {
       // Malformed JSON should be caught by the try-catch in the hook
       MockWebSocket.instances[0].onmessage?.({
         data: "invalid json",
@@ -97,14 +116,21 @@ describe("useWebSocket", () => {
     expect(result.current.lastMessage).toBeNull();
   });
 
-  it("closes WebSocket cleanly on unmount", () => {
-    const { unmount } = renderHook(() =>
-      useWebSocket<{ type: string }>("ws://localhost/test"),
-    );
+  it("closes WebSocket cleanly on unmount", async () => {
+    let unmount: () => void;
+    await act(async () => {
+      const hook = renderHook(() =>
+        useWebSocket<{ type: string }>("ws://localhost/test"),
+      );
+      unmount = hook.unmount;
+      await Promise.resolve();
+    });
     const socket = MockWebSocket.instances[0];
     const closeSpy = vi.spyOn(socket, "close");
 
-    unmount();
+    await act(async () => {
+      unmount();
+    });
 
     expect(closeSpy).toHaveBeenCalled();
   });

@@ -511,6 +511,10 @@ Copy `backend/.env.example` to `backend/.env` and fill in the values before star
 
 The backend validates all environment variables **at startup**. If a required variable is missing or malformed, the process exits immediately with a descriptive error message rather than failing silently at runtime.
 
+### Database
+
+StellarStream uses **SQLite** for persistent storage. See [ADR 0001: SQLite vs PostgreSQL](docs/adr/0001-sqlite-storage.md) for the design rationale, migration path to PostgreSQL, and performance considerations.
+
 ### Soroban / On-chain mode vs. local-only mode
 
 | Mode                          | When to use                                                    | How to enable                              |

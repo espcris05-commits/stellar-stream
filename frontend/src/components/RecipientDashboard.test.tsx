@@ -41,8 +41,9 @@ vi.mock("../services/soroban", () => {
   };
 });
 
-import { claimStream } from "../services/soroban";
+import { claimStream, claimOnChain } from "../services/soroban";
 const mockClaimStream = claimStream as ReturnType<typeof vi.fn>;
+const mockClaimOnChain = claimOnChain as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -85,16 +86,16 @@ function setupRecipientHandler(streams: unknown[]) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockClaimStream.mockResolvedValue({
-  mockClaimOnChain.mockResolvedValue({
+  const mockResult = {
     result: {
       claimedAmount: 500,
       assetCode: "USDC",
       txHash: "txhash123",
     },
     history: [],
-    history: []
-  });
+  };
+  mockClaimStream.mockResolvedValue(mockResult);
+  mockClaimOnChain.mockResolvedValue(mockResult);
 });
 
 // ---------------------------------------------------------------------------

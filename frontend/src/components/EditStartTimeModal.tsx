@@ -111,8 +111,8 @@ export function EditStartTimeModal({
       return null;
     }
     const nowSec = Math.floor(Date.now() / 1000);
-    if (ts <= nowSec) {
-      setFieldError("Start time must be in the future.");
+    if (ts < nowSec + 60) {
+      setFieldError("Start time must be in the future (at least 60 seconds).");
       return null;
     }
     return ts;
@@ -255,7 +255,7 @@ export function EditStartTimeModal({
               type="submit"
               className="btn-primary"
               id="edit-start-time-submit"
-              disabled={loading}
+              disabled={loading || fieldError !== null}
               aria-busy={loading}
             >
               {loading ? "Saving…" : "Save"}

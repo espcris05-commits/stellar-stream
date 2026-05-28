@@ -276,6 +276,28 @@ export async function fetchMetricsHistory(params: MetricsHistoryParams): Promise
   const body = await parseResponse<{ data: any[] }>(response);
   return body.data;
 }
+export async function getStream(streamId: string, signal?: AbortSignal): Promise<Stream> {
+  const url = `${API_BASE}/streams/${encodeURIComponent(streamId)}`;
+  if (signal) {
+    const response = await fetch(url, { signal });
+    const body = await parseResponse<{ data: Stream }>(response);
+    return body.data;
+  }
+  return fetchWithCache(url, async () => {
+    const response = await fetch(url);
+    const body = await parseResponse<{ data: Stream }>(response);
+    return body.data;
+  });
+}
+
+export interface AppConfig {
+  allowedAssets: string[];
+}
+
+export async function getConfig(): Promise<AppConfig> {
+  const response = await fetch(`${API_BASE}/config`);
+  return parseResponse<AppConfig>(response);
+}
 
 export function clearCache() {
   cache.clear();
