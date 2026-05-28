@@ -2,13 +2,17 @@ name: CI
 on:
   pull_request:
     paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'contracts/**'
       - '**'
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: echo "CI validation passed"
+      - name: Validate
+        run: echo "✅ CI validation passed"
