@@ -7,12 +7,16 @@ type UseWebSocketResult<T> = {
 
 const BACKOFF_MS = [1000, 2000, 4000];
 
+const WS_OPEN = 1;
+const WS_CLOSING = 2;
+const WS_CLOSED = 3;
+
 export function useWebSocket<T>(
   url: string,
   options?: { onMessage?: (data: T) => void },
 ): UseWebSocketResult<T> {
   const [lastMessage, setLastMessage] = useState<T | null>(null);
-  const [readyState, setReadyState] = useState<number>(WebSocket.CLOSED);
+  const [readyState, setReadyState] = useState<number>(WS_CLOSED);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -26,7 +30,7 @@ export function useWebSocket<T>(
 
   useEffect(() => {
     if (!url) {
-      setReadyState(WebSocket.CLOSED);
+      setReadyState(WS_CLOSED);
       return;
     }
 
@@ -39,7 +43,7 @@ export function useWebSocket<T>(
 
       socket.onopen = () => {
         reconnectAttemptRef.current = 0;
-        setReadyState(WebSocket.OPEN);
+        setReadyState(WS_OPEN);
       };
 
       socket.onmessage = (event: MessageEvent<string>) => {
@@ -53,11 +57,11 @@ export function useWebSocket<T>(
       };
 
       socket.onerror = () => {
-        setReadyState(WebSocket.CLOSING);
+        setReadyState(WS_CLOSING);
       };
 
       socket.onclose = () => {
-        setReadyState(WebSocket.CLOSED);
+        setReadyState(WS_CLOSED);
         if (closedByUnmountRef.current) return;
 
         const attempt = reconnectAttemptRef.current;

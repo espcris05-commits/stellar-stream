@@ -22,7 +22,9 @@ export function CopyableAddress({
   };
 
   const truncatedAddress =
-    truncationMode === "middle"
+    address.length <= 12
+      ? address
+      : truncationMode === "middle"
       ? `${address.slice(0, 8)}…${address.slice(-4)}`
       : `${address.slice(0, 8)}...`;
 

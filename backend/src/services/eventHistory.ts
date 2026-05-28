@@ -1,6 +1,6 @@
 import { getDb } from "./db";
 
-export type StreamEventType = "created" | "claimed" | "canceled" | "start_time_updated" | "paused" | "resumed";
+export type StreamEventType = "created" | "claimed" | "canceled" | "start_time_updated" | "paused" | "resumed" | "completed";
 
 export interface StreamEvent {
   id: number;
@@ -93,15 +93,15 @@ export function getAllEvents(limit = 100, offset = 0, cursor?: number): StreamEv
   const db = getDb();
   let query = `SELECT * FROM stream_events`;
   const params: any[] = [];
-  
+
   if (cursor !== undefined) {
     query += ` WHERE id < ?`;
     params.push(cursor);
   }
-  
+
   query += ` ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?`;
   params.push(limit, offset);
-  
+
   const rows = db.prepare(query).all(...params) as EventRow[];
   return rows.map(rowToEvent);
 }
@@ -116,15 +116,15 @@ export function getGlobalEvents(
   if (eventType) {
     let query = `SELECT * FROM stream_events WHERE event_type = ?`;
     const params: any[] = [eventType];
-    
+
     if (cursor !== undefined) {
       query += ` AND id < ?`;
       params.push(cursor);
     }
-    
+
     query += ` ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?`;
     params.push(limit, offset);
-    
+
     const rows = db.prepare(query).all(...params) as EventRow[];
     return rows.map(rowToEvent);
   }

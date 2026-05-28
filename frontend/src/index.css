@@ -983,4 +983,27 @@ td {
   border-bottom-color: #0ea5a5;
 }
 
+/* ── prefers-reduced-motion ─────────────────────────────── */
 
+@media (prefers-reduced-motion: reduce) {
+  /* Disable skeleton shimmer — show static tint instead */
+  .skeleton {
+    animation: none;
+    background-image: none;
+    background: #e5e7eb;
+  }
+
+  /* Disable progress bar width transitions */
+  .progress-bar > div {
+    transition: none;
+  }
+
+  /* Disable all generic transitions */
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

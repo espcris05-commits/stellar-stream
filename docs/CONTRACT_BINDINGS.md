@@ -187,6 +187,118 @@ export async function cancelStream(streamId: string): Promise<Stream> {
 // await streamContract.claim(BigInt(streamId), recipientAddress, amount);
 ```
 
+### `create_stream` — Creating a new payment stream
+
+To create a stream, the sender must authorize the transaction. The tokens are transferred from the sender's account to the contract's escrow.
+
+```typescript
+import { streamContract } from "./contractClient";
+
+async function handleCreateStream(sender: string, recipient: string, token: string) {
+  try {
+    const totalAmount = BigInt(1000 * 10**7); // 1000 tokens with 7 decimals
+    const startTime = BigInt(Math.floor(Date.now() / 1000));
+    const endTime = startTime + BigInt(30 * 24 * 60 * 60); // 30 days
+    const cliffSeconds = BigInt(0);
+
+    // Metadata is optional
+    const metadata = new Map([
+      ["label", "Monthly Salary"],
+      ["project", "StellarStream"]
+    ]);
+
+    const streamId = await streamContract.createStream({
+      sender,
+      recipient,
+      token,
+      total_amount: totalAmount,
+      start_time: startTime,
+      end_time: endTime,
+      cliff_seconds: cliffSeconds,
+      metadata
+    });
+
+    console.log(`Stream created with ID: ${streamId}`);
+  } catch (err) {
+    console.error("Failed to create stream:", err);
+  }
+}
+```
+
+### `claim` — Recipient claiming vested tokens
+
+The recipient can claim any amount up to the current `claimable` total. This requires Freighter (or another wallet) to sign for the recipient's `Address`.
+
+```typescript
+import { streamContract } from "./contractClient";
+
+async function handleClaim(streamId: bigint, recipient: string, amount: bigint) {
+  try {
+    // This will trigger a wallet popup for the recipient to authorize
+    const claimed = await streamContract.claim({
+      stream_id: streamId,
+      recipient,
+      amount
+    });
+
+    console.log(`Successfully claimed ${claimed} tokens`);
+  } catch (err) {
+    // See "Error Handling" section below for common error codes
+    console.error("Claim failed:", err);
+  }
+}
+```
+
+### `get_claimable_batch` — Efficiently fetching multiple balances
+
+Instead of calling `claimable` for every stream in a list, use the batch method.
+
+```typescript
+import { streamContract } from "./contractClient";
+
+async function fetchBalances(streamIds: bigint[]) {
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  
+  // Returns a Map<bigint, bigint>
+  const balances = await streamContract.getClaimableBatch({
+    stream_ids: streamIds,
+    at_time: now
+  });
+
+  streamIds.forEach(id => {
+    console.log(`Stream ${id} balance: ${balances.get(id)}`);
+  });
+}
+```
+
+---
+
+## Error Handling
+
+The Soroban contract will panic with specific messages if validation fails. The TypeScript client captures these as errors.
+
+| Error Message | Cause |
+|---|---|
+| `total_amount must be positive` | `total_amount` is 0 or negative. |
+| `end_time must be greater than start_time` | Invalid time range provided. |
+| `insufficient sender balance` | Sender does not have enough tokens to escrow. |
+| `recipient mismatch` | The address calling `claim` is not the stream's recipient. |
+| `amount exceeds claimable` | Trying to claim more than what has vested. |
+| `too many stream ids` | `get_claimable_batch` called with more than 20 IDs. |
+| `stream canceled` | Action attempted on a canceled stream. |
+
+### Example error check
+
+```typescript
+try {
+  await streamContract.claim({ ... });
+} catch (err: any) {
+  if (err.message.includes("amount exceeds claimable")) {
+    // Handle specific business logic error
+  }
+}
+```
+
 ---
 
 ## Regenerating after a contract change

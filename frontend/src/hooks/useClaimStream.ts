@@ -1,3 +1,6 @@
+import { useState, useRef, useCallback } from "react";
+import { claimStream, ClaimResult } from "../services/soroban";
+import type { StreamEvent } from "../services/api";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

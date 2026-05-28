@@ -1,0 +1,24 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "stellar-stream",
+      "initial-version": "1.0.0"
+    },
+    "backend": {
+      "release-type": "node",
+      "package-name": "stellar-stream-backend",
+      "initial-version": "1.0.0"
+    },
+    "frontend": {
+      "release-type": "node",
+      "package-name": "stellar-stream-frontend",
+      "initial-version": "1.0.0"
+    }
+  },
+  "plugins": [
+    {
+      "type": "node-workspace"
+    }
+  ]
+}

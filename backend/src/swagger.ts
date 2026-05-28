@@ -157,7 +157,7 @@ export const swaggerDocument = {
           },
           eventType: {
             type: "string",
-            enum: ["created", "claimed", "canceled", "start_time_updated"],
+            enum: ["created", "claimed", "canceled", "start_time_updated", "paused", "resumed", "completed"],
             example: "created",
           },
           timestamp: {
@@ -505,6 +505,15 @@ export const swaggerDocument = {
             in: "query",
             required: false,
             description: "Exact asset code match.",
+            schema: {
+              type: "string",
+            },
+          },
+          {
+            name: "assetCode",
+            in: "query",
+            required: false,
+            description: "Filter by one or more asset codes (comma-separated). Case-insensitive. Example: ?assetCode=USDC,XLM",
             schema: {
               type: "string",
             },
@@ -1016,12 +1025,15 @@ export const swaggerDocument = {
                   properties: {
                     data: {
                       type: "object",
-                      required: ["created", "claimed", "canceled", "start_time_updated"],
+                      required: ["created", "claimed", "canceled", "start_time_updated", "paused", "resumed", "completed"],
                       properties: {
                         created: { type: "integer", example: 1 },
                         claimed: { type: "integer", example: 3 },
                         canceled: { type: "integer", example: 0 },
                         start_time_updated: { type: "integer", example: 1 },
+                        paused: { type: "integer", example: 0 },
+                        resumed: { type: "integer", example: 0 },
+                        completed: { type: "integer", example: 1 },
                       },
                     },
                   },

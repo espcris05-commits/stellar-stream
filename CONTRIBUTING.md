@@ -2,53 +2,27 @@
 
 Thank you for your interest in contributing to StellarStream! This guide will help you get started with our development process.
 
+Check out the [FAQ.md](FAQ.md) for common contributor questions and troubleshooting tips.
+
+## Code of Conduct
+
+Participation in this project is governed by our [Code of Conduct](CODE_OF_CONDUCT.md). By contributing, you are expected to uphold this standard.
+
+## Security
+
+If you discover a security vulnerability, please follow our [Security Policy](SECURITY.md) and report it privately via the GitHub Security Advisory form. Do not open public issues for security concerns.
+
 ## Development Setup
 
 1. Clone the repository
 2. Install dependencies: `npm run install:all`
-3. Install root development tooling: `npm install`
-4. Install Git hooks: `npm run prepare`
-5. Run the development environment with `npm run dev:backend` and
-   `npm run dev:frontend` in separate terminals.
 
-## Pre-commit Checks
-
-This repository uses Husky and lint-staged to run ESLint and Prettier on staged
-`.ts` and `.tsx` files before each commit.
-
-The pre-commit hook runs:
-
-```bash
-npx lint-staged
-```
-
-ESLint runs with `--fix` before Prettier formats the staged files. If ESLint
-finds an error it cannot fix, the commit fails and the changes must be fixed
-before committing again.
-
-### WSL2
-
-When working on Windows with WSL2, run Git and npm commands from the WSL2
-terminal, preferably with the repository stored in the Linux filesystem
-(for example, under `~/projects`) rather than `/mnt/c`. After installing
-dependencies, run:
-
-```bash
-npm run prepare
-chmod +x .husky/pre-commit
-```
-
-To verify the hook in WSL2, stage a `.ts` or `.tsx` file and run:
-
-```bash
-npx lint-staged
-```
 
 ## Testing
 
 ### Backend Tests
 
-Run `npm run test` in the `backend/` directory.
+
 
 ### Contract Tests
 

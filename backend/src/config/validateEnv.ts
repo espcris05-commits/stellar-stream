@@ -38,6 +38,11 @@ const indexerPollIntervalSchema = z
     message: "must be a valid number >= 5000 (minimum 5 seconds)",
   });
 
+// Admin API key validation
+const adminApiKeySchema = z
+  .string()
+  .min(32, "must be at least 32 characters for security");
+
 // Environment config schema
 const envSchema = z.object({
   PORT: portSchema.optional().default(3001),
@@ -74,6 +79,7 @@ export interface ValidatedConfig {
   serverSigningKey: string | null;
   domain: string;
   indexerPollIntervalMs: number;
+  adminApiKey: string | null;
 }
 
 export function validateEnv(): ValidatedConfig {
@@ -194,6 +200,31 @@ export function validateEnv(): ValidatedConfig {
     throw new Error("Environment validation failed");
   }
 
+  // Validate ADMIN_API_KEY if provided
+  let adminApiKey: string | null = null;
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (process.env.ADMIN_API_KEY) {
+    const adminKeyValidation = adminApiKeySchema.safeParse(process.env.ADMIN_API_KEY);
+    if (!adminKeyValidation.success) {
+      console.error("❌ ADMIN_API_KEY validation failed:");
+      adminKeyValidation.error.issues.forEach((issue: z.ZodIssue) => {
+        console.error(`   ${issue.message}`);
+      });
+      if (isProduction) {
+        console.error("   In production, ADMIN_API_KEY must be at least 32 characters");
+        process.exit(1);
+        throw new Error("Environment validation failed");
+      } else {
+        console.warn("   ⚠️  In development, short keys are allowed but not recommended");
+      }
+    } else {
+      adminApiKey = process.env.ADMIN_API_KEY;
+    }
+  } else if (isProduction) {
+    console.warn("⚠️  ADMIN_API_KEY is not set in production — admin endpoints will be inaccessible");
+  }
+
   console.log(`✅ Configuration validated (port: ${env.PORT}, assets: ${allowedAssets.join(", ")}, indexer interval: ${env.INDEXER_POLL_INTERVAL_MS}ms)`);
 
   return {
@@ -211,5 +242,6 @@ export function validateEnv(): ValidatedConfig {
     serverSigningKey: env.SERVER_SIGNING_KEY || null,
     domain: env.DOMAIN,
     indexerPollIntervalMs: env.INDEXER_POLL_INTERVAL_MS,
+    adminApiKey,
   };
 }

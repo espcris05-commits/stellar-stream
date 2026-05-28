@@ -270,42 +270,30 @@ sqlite> SELECT * FROM stream_events ORDER BY timestamp DESC LIMIT 10;
 sqlite> .quit
 ```
 
----
+## Release Process
 
-## Release Checklist
+StellarStream uses `release-please` to automate versioning and changelog generation.
 
-StellarStream does not yet have a formal versioning pipeline. Use this checklist before tagging any release or deploying changes to a shared environment.
+### How it works
+1. **Conventional Commits**: All PRs merged into `main` must follow [Conventional Commits](https://www.conventionalcommits.org/).
+   - `fix:` triggers a patch release.
+   - `feat:` triggers a minor release.
+   - `feat!:` or `fix!:` (with a `BREAKING CHANGE` footer) triggers a major release.
+2. **Release PR**: `release-please` automatically opens a "Release PR" when new commits are pushed to `main`. This PR updates `package.json` and `CHANGELOG.md`.
+3. **Merging Release PR**: When the Release PR is merged:
+   - A GitHub Release is created.
+   - A git tag (e.g., `v1.1.0`) is created.
+   - Docker images are automatically built and pushed to **GitHub Container Registry (GHCR)**.
 
-### Pre-Release: Code Review
-- [ ] All PRs intended for this release are merged and CI is green
-- [ ] No open PRs with the `breaking` label are unresolved
-- [ ] CHANGELOG.md (or release notes draft) is updated with user-facing changes
-- [ ] Known limitations section in README.md is current
+### Docker Images
+Images are available at:
+- `ghcr.io/<owner>/stellar-stream-backend`
+- `ghcr.io/<owner>/stellar-stream-frontend`
 
-### Pre-Release: Backend Checks
-- [ ] `backend/src/services/db.ts` — confirm schema migrations are non-destructive (SQLite does not support column drops; verify ALTER TABLE usage)
-- [ ] `backend/src/services/streamStore.ts` — confirm stream math (elapsed, ratio, vested) has not regressed; spot-check against the formulas in the README
-- [ ] Event indexer (`backend/src/services/indexer.ts`) poll interval is intentional (default 10 seconds)
-- [ ] All required environment variables are documented (see README): `CONTRACT_ID`, `SERVER_PRIVATE_KEY`, `RPC_URL`
-- [ ] `.env.example` is up to date if one exists
+Each image is tagged with `latest` and the version tag (e.g., `v1.1.0`).
 
-### Pre-Release: Frontend Checks
-- [ ] `frontend/vite.config.ts` proxy target still points to correct backend port (3001)
-- [ ] Polling interval in `frontend/src/App.tsx` is intentional (default 5 seconds)
-- [ ] `VITE_API_URL` override is documented for non-default deployments
-- [ ] UI renders correctly for all four stream statuses: scheduled, active, completed, canceled
-
-### Pre-Release: Contract Checks
-- [ ] Contract compiles cleanly: `cd contracts && cargo build --target wasm32-unknown-unknown --release`
-- [ ] Any changes to `create_stream`, `claimable`, `claim`, or `cancel` ABI are reflected in `backend/src/services/streamStore.ts`
-- [ ] `contracts/contract_id.txt` is not committed with a production secret key
-
-### Release Tagging
-
-```bash
-git tag -a v0.x.0 -m "Release v0.x.0 — <one-line summary>"
-git push origin v0.x.0
-```
+### Manual Release Tagging (Legacy)
+Previously, releases were tagged manually. This is no longer recommended.
 
 ### Post-Release
 - [ ] Verify health endpoint responds on deployed instance: `GET /api/health`
@@ -472,10 +460,12 @@ npm update     # Update to latest compatible versions
 - Create PR for review
 
 ### Security Reporting
-- Do NOT create public issues for security vulnerabilities
-- Email security concerns to maintainers privately
-- Follow responsible disclosure (30-day window)
-- Credit reporters in release notes
+- Do NOT create public issues for security vulnerabilities.
+- Direct researchers to the [Security Policy](SECURITY.md).
+- Ensure **GitHub Security Advisories** are enabled for the repository to allow private reporting.
+- Follow responsible disclosure (30-day window).
+- SLA: 48h acknowledgement, 7d initial assessment, 30d fix target.
+- Credit reporters in release notes.
 
 ### Code Security Review
 - Check for SQL injection (SQLite queries in `backend/src/services/db.ts`)
