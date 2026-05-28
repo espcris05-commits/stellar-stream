@@ -20,5 +20,7 @@
       "prettier --write"
     ]
   },
-  "devDependencies": {
+  "devDependencies": {}
+
+}
 
