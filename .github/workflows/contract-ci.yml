@@ -38,10 +38,37 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      - name: Check Rust version compatibility
+        run: rustc --version && cargo --version
+
       - name: Check contract formatting
         run: cargo fmt --all -- --check
+
+      - name: Run clippy (lint)
+        run: cargo clippy --all-targets --all-features -- -D warnings 2>/dev/null || echo "::warning::Clippy warnings found - review output"
+        continue-on-error: true
+
+      - name: Build contract (debug)
+        run: cargo build --locked
 
       - name: Run contract tests
         env:
           RUSTFLAGS: "-D warnings"
         run: cargo test --locked
+
+      - name: Build WASM release binary
+        run: cargo build --target wasm32-unknown-unknown --release --locked
+
+      - name: Report WASM binary size
+        run: |
+          WASM_FILE=\$(find target/wasm32-unknown-unknown/release -name "*.wasm" | head -1)
+          if [ -n "\$WASM_FILE" ]; then
+            SIZE_BYTES=\$(wc -c < "\$WASM_FILE")
+            SIZE_KB=\$(echo "scale=2; \$SIZE_BYTES / 1024" | bc)
+            echo "### WASM Binary Size" >> \$GITHUB_STEP_SUMMARY
+            echo "| File | Size |" >> \$GITHUB_STEP_SUMMARY
+            echo "|------|------|" >> \$GITHUB_STEP_SUMMARY
+            echo "| \`\$WASM_FILE\` | \${SIZE_KB} KB (\${SIZE_BYTES} bytes) |" >> \$GITHUB_STEP_SUMMARY
+          else
+            echo "No WASM file found." >> \$GITHUB_STEP_SUMMARY
+          fi
