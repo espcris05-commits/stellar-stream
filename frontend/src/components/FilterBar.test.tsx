@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, renderHook } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { FilterBar } from "./FilterBar";
 import { ListStreamsFilters } from "../services/api";
@@ -31,7 +31,7 @@ describe("FilterBar Component", () => {
     const handleChange = vi.fn();
     render(<FilterBar filters={mockFilters} onChange={handleChange} />);
     
-    const scheduledBtn = screen.getByText(/Scheduled/i);
+    const scheduledBtn = screen.getByRole("button", { name: /Scheduled/i });
     fireEvent.click(scheduledBtn);
     
     expect(handleChange).toHaveBeenCalledWith({
@@ -47,7 +47,7 @@ describe("FilterBar Component", () => {
     const handleChange = vi.fn();
     render(<FilterBar filters={mockFilters} onChange={handleChange} />);
     
-    const atRiskBtn = screen.getByText(/At-Risk/i);
+    const atRiskBtn = screen.getByRole("button", { name: /At-Risk/i });
     fireEvent.click(atRiskBtn);
     
     expect(handleChange).toHaveBeenCalledWith({
@@ -133,18 +133,18 @@ describe("FilterBar URL Sync Integration", () => {
   it("restores filter state from URL on page load with ?status=completed", () => {
     (window as any).location.search = "?status=completed";
 
-    const { filters } = useUrlFilters();
+    const { result } = renderHook(() => useUrlFilters());
 
-    expect(filters.status).toBe("completed");
+    expect(result.current.filters.status).toBe("completed");
   });
 
   it("restores filter state from URL with multiple params", () => {
     (window as any).location.search = "?status=active&asset=USDC";
 
-    const { filters } = useUrlFilters();
+    const { result } = renderHook(() => useUrlFilters());
 
-    expect(filters.status).toBe("active");
-    expect(filters.asset).toBe("USDC");
+    expect(result.current.filters.status).toBe("active");
+    expect(result.current.filters.asset).toBe("USDC");
   });
 
   it("clears URL params when all filters are reset", () => {
@@ -214,19 +214,19 @@ describe("FilterBar URL Sync Integration", () => {
   it("handles invalid status values in URL by defaulting to empty", () => {
     (window as any).location.search = "?status=invalid";
 
-    const { filters } = useUrlFilters();
+    const { result } = renderHook(() => useUrlFilters());
 
-    expect(filters.status).toBe("");
+    expect(result.current.filters.status).toBe("");
   });
 
   it("handles empty URL params correctly", () => {
     (window as any).location.search = "";
 
-    const { filters } = useUrlFilters();
+    const { result } = renderHook(() => useUrlFilters());
 
-    expect(filters.status).toBe("");
-    expect(filters.asset).toBe("");
-    expect(filters.sender).toBe("");
-    expect(filters.recipient).toBe("");
+    expect(result.current.filters.status).toBe("");
+    expect(result.current.filters.asset).toBe("");
+    expect(result.current.filters.sender).toBe("");
+    expect(result.current.filters.recipient).toBe("");
   });
 });

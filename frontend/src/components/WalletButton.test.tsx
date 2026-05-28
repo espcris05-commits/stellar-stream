@@ -127,9 +127,9 @@ describe('WalletButton Component', () => {
         disconnect: mockDisconnect,
       };
 
-      render(<WalletButton wallet={wallet} />);
+      const { container } = render(<WalletButton wallet={wallet} />);
       
-      const statusDot = screen.getByClassName('wallet-dot--connected');
+      const statusDot = container.querySelector('.wallet-dot--connected');
       expect(statusDot).toBeInTheDocument();
       expect(statusDot).toHaveAttribute('aria-hidden', 'true');
     });
@@ -237,7 +237,7 @@ describe('WalletButton Component', () => {
 
     it('handles edge case with very short address', () => {
       const shortAddress = 'GBX5ZID6';
-      const expectedTruncated = 'GBX5…ID6';
+      const expectedTruncated = 'GBX5…ZID6';
       
       const wallet: FreighterState = {
         installed: true,

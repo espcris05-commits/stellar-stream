@@ -85,7 +85,6 @@ function rowToRecord(row: StreamRow): StreamRecord {
     refundedAmount: row.refunded_amount ?? undefined,
     pausedAt: row.paused_at ?? undefined,
     pausedDuration: row.paused_duration ?? 0,
-    pausedDuration: row.paused_duration,
   };
 }
 
@@ -160,7 +159,7 @@ export async function initSoroban() {
   }
 }
 
-function nowInSeconds(): number {
+export function nowInSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
 
@@ -360,11 +359,8 @@ function computeStatus(stream: StreamRecord, at: number): StreamStatus {
   if (at < stream.startAt) {
     return "scheduled";
   }
-  if (at >= stream.startAt + stream.durationSeconds) {
+  if (at >= stream.startAt + stream.durationSeconds + stream.pausedDuration) {
     return "completed";
-  }
-  if (stream.pausedAt !== undefined) {
-    return "active"; // Or could be a "paused" status if we want to add it
   }
   return "active";
 }
@@ -380,24 +376,16 @@ export function calculateProgress(
   stream: StreamRecord,
   at = nowInSeconds(),
 ): StreamProgress {
-  const streamEnd = stream.startAt + stream.durationSeconds;
 
-  // Calculate paused duration including current pause if active
-  let pausedDuration = stream.pausedDuration;
-  if (stream.pausedAt !== undefined) {
-    pausedDuration += Math.max(0, at - stream.pausedAt);
   }
 
-  const effectiveEnd =
-    stream.canceledAt !== undefined
-      ? Math.min(stream.canceledAt, streamEnd)
-      : streamEnd;
+  const streamEnd = stream.startAt + stream.durationSeconds;
 
   // When paused, vesting is frozen at the moment of pause.
   const effectiveAt =
     stream.pausedAt !== undefined ? Math.min(at, stream.pausedAt) : at;
 
-  const elapsed = Math.max(0, Math.min(effectiveAt, effectiveEnd) - stream.startAt);
+
 
   const ratio = Math.min(1, elapsed / stream.durationSeconds);
   const vestedAmount = stream.totalAmount * ratio;
@@ -712,12 +700,7 @@ export async function createStream(input: StreamInput): Promise<StreamRecord> {
   return stream;
 }
 
-/**
- * Refreshes stream statuses by marking completed streams.
- * Marks streams as completed when current time exceeds stream end time.
- * Records "completed" events and triggers webhooks for newly completed streams.
- * @returns {number} Number of streams marked as completed
- */
+
 export function refreshStreamStatuses(): number {
   const db = getDb();
   const now = nowInSeconds();
@@ -725,14 +708,14 @@ export function refreshStreamStatuses(): number {
 
   const toComplete = db.prepare(`
     SELECT * FROM streams 
-    WHERE canceled_at IS NULL AND completed_at IS NULL
+    WHERE canceled_at IS NULL AND completed_at IS NULL AND paused_at IS NULL
       AND (start_at + duration_seconds) <= ?
   `).all() as StreamRow[];
 
 
   const result = db.prepare(`
     UPDATE streams SET completed_at = ?
-    WHERE canceled_at IS NULL AND completed_at IS NULL
+    WHERE canceled_at IS NULL AND completed_at IS NULL AND paused_at IS NULL
       AND (start_at + duration_seconds) <= ?
   `).run(now, now);
 
@@ -963,7 +946,6 @@ export async function cancelStream(
   return stream;
 }
 
-// Duplicate pauseStream and resumeStream functions removed
 
 /**
  * Updates the start time of a scheduled stream.

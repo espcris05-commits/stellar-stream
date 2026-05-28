@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
-import { useMetricsHistory } from "./useMetricsHistory";
+import { renderHook, waitFor, act } from "@testing-library/react";
+import { useMetricsHistory, TimeRange } from "./useMetricsHistory";
 import { ApiError } from "../services/api";
 
 // Mock the API module
@@ -23,8 +23,8 @@ const mockFetchMetricsHistory = vi.mocked(fetchMetricsHistory);
 
 describe("useMetricsHistory", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.useFakeTimers();
+    vi.resetAllMocks();
+    vi.useFakeTimers({ toFake: ["Date"] });
   });
 
   afterEach(() => {
@@ -152,7 +152,7 @@ describe("useMetricsHistory", () => {
     expect(mockFetchMetricsHistory).toHaveBeenCalledTimes(2);
 
     // Verify second call had correct 30-day timestamps
-    const [, secondCall] = mockFetchMetricsHistory.mock.calls;
+    const secondCall = mockFetchMetricsHistory.mock.calls[1][0];
     const now = Date.now();
     const expectedStart = now - 30 * 24 * 60 * 60 * 1000;
     expect(secondCall.startTimestamp).toBeCloseTo(expectedStart, -3);
@@ -171,7 +171,7 @@ describe("useMetricsHistory", () => {
 
     // Verify data structure matches MetricsSnapshot interface
     expect(result.current.data).toHaveLength(3);
-    result.current.data.forEach((snapshot, index) => {
+    result.current.data.forEach((snapshot) => {
       expect(snapshot).toHaveProperty("timestamp");
       expect(snapshot).toHaveProperty("active");
       expect(snapshot).toHaveProperty("completed");
@@ -184,9 +184,11 @@ describe("useMetricsHistory", () => {
   });
 
   it("shows loading state during API call", async () => {
-    mockFetchMetricsHistory.mockImplementation(() => 
-      new Promise(resolve => setTimeout(() => resolve(createMockMetrics()), 100))
-    );
+    let resolvePromise: any;
+    const promise = new Promise(resolve => {
+      resolvePromise = resolve;
+    });
+    mockFetchMetricsHistory.mockReturnValue(promise);
 
     const { result } = renderHook(() => useMetricsHistory("7d"));
 
@@ -194,8 +196,10 @@ describe("useMetricsHistory", () => {
     expect(result.current.error).toBe(null);
     expect(result.current.data).toEqual([]);
 
-    // Advance time to resolve the promise
-    vi.advanceTimersByTime(100);
+    // Resolve the promise
+    act(() => {
+      resolvePromise(createMockMetrics());
+    });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -208,7 +212,10 @@ describe("useMetricsHistory", () => {
     const apiError = new ApiError("Network error", 500);
     mockFetchMetricsHistory.mockRejectedValueOnce(apiError);
 
-    const { result, rerender } = renderHook(() => useMetricsHistory("7d"));
+    const { result, rerender } = renderHook(
+      ({ range }) => useMetricsHistory(range),
+      { initialProps: { range: "7d" as TimeRange } }
+    );
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -219,8 +226,8 @@ describe("useMetricsHistory", () => {
     const mockData = createMockMetrics();
     mockFetchMetricsHistory.mockResolvedValueOnce(mockData);
 
-    // Rerender to trigger retry
-    rerender();
+    // Rerender with different props to trigger retry
+    rerender({ range: "30d" });
 
     expect(result.current.loading).toBe(true);
 

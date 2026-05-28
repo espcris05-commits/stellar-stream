@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
+import { logger } from "../logger";
 
 declare global {
   namespace Express {
@@ -30,16 +31,8 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
       duration: `${duration}ms`,
     };
 
-    // ✅ STEP 4: Make logs readable in development
-    if (process.env.NODE_ENV === "production") {
-      // Machine-readable (for logging systems)
-      console.log(JSON.stringify(logEntry));
-    } else {
-      // Human-readable (for local dev)
-      console.log(
-        `${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms | id=${requestId}`
-      );
-    }
+    // ✅ STEP 4: Use structured logger with redaction
+    logger.info(logEntry, `${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms | id=${requestId}`);
   });
 
   // ✅ STEP 5: Continue request

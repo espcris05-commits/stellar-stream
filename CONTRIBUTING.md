@@ -4,46 +4,19 @@ Thank you for your interest in contributing to StellarStream! This guide will he
 
 Check out the [FAQ.md](FAQ.md) for common contributor questions and troubleshooting tips.
 
-## Code of Conduct
 
-Participation in this project is governed by our [Code of Conduct](CODE_OF_CONDUCT.md). By contributing, you are expected to uphold this standard.
-
-## Security
-
-If you discover a security vulnerability, please follow our [Security Policy](SECURITY.md) and report it privately via the GitHub Security Advisory form. Do not open public issues for security concerns.
 
 ## Development Setup
 
 1. Clone the repository
 2. Install dependencies: `npm run install:all`
-3. Seed demo data: `node scripts/seed-streams.js --reset`
-4. Run the development environment: `npm run dev`
 
-### Seeding Demo Data
-
-To populate your local database with deterministic demo streams:
-
-```bash
-# Seed 10 default streams
-node scripts/seed-streams.js
-
-# Seed custom number of streams
-node scripts/seed-streams.js --count 20
-
-# Reset database and seed
-node scripts/seed-streams.js --reset
-
-# Combine options
-node scripts/seed-streams.js --reset --count 15
-```
-
-The seed script creates streams across all statuses (scheduled, active, paused, completed, canceled) with deterministic data, ensuring consistent results on every run when the database is empty.
 
 ## Testing
 
 ### Backend Tests
 
-Run `npm run test` in the `backend/` directory.
+
 
 ### Contract Tests
 
@@ -59,4 +32,3 @@ If you change event structures and need to update the snapshots, run:
 
 ```bash
 cargo insta review
-```

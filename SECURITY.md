@@ -32,3 +32,12 @@ Once a report is received through the GitHub Security Advisory form, we commit t
 ## GitHub Security Advisories
 
 Maintainers: Please ensure that **GitHub Security Advisories** are enabled for this repository to allow researchers to submit reports privately.
+
+## Logging and Secret Redaction
+
+Server logs are configured to redact Stellar secret keys to prevent accidental leakage. The backend uses `pino` with the following protections:
+
+- Structured field redaction for paths: `*.secretKey`, `*.privateKey`, `*.seed`.
+- Regex-based redaction for any string matching `^S[0-9A-Z]{55}$` (Stellar secret seed format).
+
+If you discover logs containing secret material, please follow the private reporting process above.

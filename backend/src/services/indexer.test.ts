@@ -97,17 +97,18 @@ function setupDb(contractId: string, lastLedger = 100) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       stream_id TEXT NOT NULL,
       event_type TEXT NOT NULL,
+      ledger_sequence INTEGER,
       timestamp INTEGER NOT NULL,
       actor TEXT,
       amount REAL,
       metadata TEXT
     );
     CREATE TABLE indexer_cursor (
-      id TEXT PRIMARY KEY,
-      last_ledger INTEGER NOT NULL
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      last_ledger_sequence INTEGER NOT NULL
     );
   `);
-  db.prepare("INSERT INTO indexer_cursor (id, last_ledger) VALUES (?, ?)").run(contractId, lastLedger);
+  db.prepare("INSERT INTO indexer_cursor (id, last_ledger_sequence) VALUES (1, ?)").run(lastLedger);
 }
 
 async function runOnePoll(contractId: string) {
@@ -143,6 +144,8 @@ describe("indexer processEvent — StreamClaimed", () => {
       Math.floor(new Date(event.ledgerClosedAt).getTime() / 1000),
       event.value.recipient,
       event.value.amount,
+      undefined,
+      undefined,
     );
   });
 
