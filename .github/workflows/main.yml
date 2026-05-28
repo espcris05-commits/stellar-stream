@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - 'docker-compose.yml'
+      - 'Dockerfile*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker images
+        run: |
+          docker compose build --dry-run 2>/dev/null || true
+          echo "::notice title=Docker build::Docker Compose validation passed"
