@@ -604,6 +604,7 @@ describe("Backend Integration Tests", () => {
         expect(response.status).toBe(200);
         expect(response.body.data).toHaveLength(1);
         expect(response.body.data[0].sender).toBe(mockStream.sender);
+        expect(response.body.data[0].progress).toBeDefined();
       });
 
       it("should filter sender streams by status", async () => {

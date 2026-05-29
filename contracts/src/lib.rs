@@ -224,7 +224,13 @@ impl StellarStreamContract {
             panic!("recipients must not be empty");
         }
 
-        let token_client = TokenClient::new(&env, &token);
+        let is_native = token.to_string() == String::from_str(&env, NATIVE_SENTINEL);
+        let actual_token = if is_native {
+            env.storage().instance().get(&DataKey::NativeToken).unwrap_or_else(|| panic!("not initialized"))
+        } else {
+            token.clone()
+        };
+        let token_client = TokenClient::new(&env, &actual_token);
         let sender_balance = token_client.balance(&sender);
         if sender_balance < total_amount {
             panic!("insufficient sender balance");
