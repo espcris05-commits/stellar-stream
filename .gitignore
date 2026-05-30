@@ -19,4 +19,10 @@ frontend/src/contracts/generated/*
 !frontend/src/contracts/generated/README.md
 
 # Deployed contract ID (changes per deployment, not committed)
-contracts/contract_id.txt
+contracts/contract_id.txt.vscode/
+.idea/
+*.swp
+dist/
+build/
+.DS_Store
+.env.local
