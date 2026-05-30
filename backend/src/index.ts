@@ -224,6 +224,21 @@ const claimableLimiter = rateLimit({
 
 app.use(cors());
 app.use(requestLogger);
+
+// Content-Security-Policy header
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data: blob:; " +
+    "font-src 'self'; " +
+    "connect-src 'self' https://api.stellar.org; " +
+    "frame-ancestors 'none'"
+  );
+  next();
+});
 app.use(
   express.json({
     limit: "32kb",
